@@ -48,6 +48,23 @@ class Deck:
 
 
 class Card:
+    rank_order = {
+        "Ace": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5,
+        "6": 6,
+        "7": 7,
+        "8": 8,
+        "9": 9,
+        "10": 10,
+        "Jack": 11,
+        "Queen": 12,
+        "King": 13,
+    }
+    suit_order = {"Clubs": 1, "Diamonds": 2, "Hearts": 3, "Spades": 4}
+
     def __init__(self, suit, rank):
         self.suit = suit
         self.rank = rank
@@ -58,24 +75,41 @@ class Card:
     def __repr__(self):
         return f"({self.rank},{self.suit[0].capitalize()})"
 
+    def _cmp_key(self):
+        return (self.rank_order[self.rank], self.suit_order[self.suit])
 
-class Trash:
-    # // trash is just a list of cards. Player always gets all the trash cards
-    def __init__(self):
-        self.cards = []
+    def __lt__(self, other):
+        return self._cmp_key() < other._cmp_key()
 
-    def add(self, card):
-        self.cards.append(card)
+    def __gt__(self, other):
+        return self._cmp_key() > other._cmp_key()
 
-    def add_to_hand(self, player):
-        player.hand += self.cards
-        self.cards = []
+    def __eq__(self, other):
+        return self._cmp_key() == other._cmp_key()
 
-    def show(self):
-        return self.cards
+
+class Card_set:
+    def __init__(self, suit, cards):
+        self.suit = suit
+        self.cards = set(cards)
 
     def __str__(self):
-        return str(self.cards)
+        return f"({self.suit} has : {self.cards})"
 
     def __repr__(self):
-        return str(self.cards)
+        return f"({self.suit} has : {self.cards})"
+
+    def _extends(self, card_list):
+        # // card is not in the set, card is the next rank or card is the prior rank
+        first, last = self.cards[0], self.cards[-1]
+        for card in card_list:
+            if card in self.cards:
+                return False
+            if card.rank != first.rank - 1 or card.rank != last.rank + 1:
+                return False
+        return True
+
+    def _add_to_set(self, card_list):
+        self.cards.update(card_list)
+        sorted_list = sorted(self.cards)
+        self.cards = set(sorted_list)

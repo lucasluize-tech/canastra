@@ -1,4 +1,4 @@
-from deck import Deck, Card, Trash
+from deck import Deck, Card
 from player import Player
 import random
 
@@ -16,12 +16,13 @@ class Table:
     def __init__(self, players, deck, new_hands):
         self.players = players
         self.new_hands = new_hands
-        self.team1_sets = []
-        self.team2_sets = []
+        self.team1_sets = {}  # // {suit: [card_set, card_set]}
+        self.team2_sets = {}
         self.team1 = []
         self.team2 = []
-        self.trash = Trash()
+        self.trash = []
         self.deck = deck
+        self.game_over = False
 
         if len(players) % 2 != 0 or len(new_hands) % 2 != 0:
             raise ValueError("Number of players and new_hands must be even.")
@@ -33,10 +34,19 @@ class Table:
                 self.team2.append(players[_])
 
     def __repr__(self):
-        return f"Team 1: {self.team1}, Team 1 sets: {self.team1_sets},\nTeam 2: {self.team2}\n, Team 2 sets: {self.team2_sets}\n, Trash: {self.trash}\n, Deck: {self.deck}\n, New Hands: {self.new_hands}\n"
+        return f"Team 1: {self.team1},\n\nTeam 1 sets: {self.team1_sets},\n\nTeam 2: {self.team2},\n\n Team 2 sets: {self.team2_sets},\n\nTrash: {self.trash},\n\nDeck: {self.deck},\n\n# Cards in Deck: {len(self.deck.cards)},\n\nNew Hands: {self.new_hands}\n\n"
 
     def __str__(self):
-        return f"Team 1: {self.team1}, Team 1 sets: {self.team1_sets},\nTeam 2: {self.team2}\n, Team 2 sets: {self.team2_sets}\n, Trash: {self.trash}\n, Deck: {self.deck}\n, New Hands: {self.new_hands}\n"
+        return f"Team 1: {self.team1},\n\nTeam 1 sets: {self.team1_sets},\n\nTeam 2: {self.team2},\n\n Team 2 sets: {self.team2_sets},\n\nTrash: {self.trash},\n\nDeck: {self.deck},\n\n# Cards in Deck: {len(self.deck.cards)},\n\nNew Hands: {self.new_hands}\n\n"
 
     def _shuffle_players(self):
         random.shuffle(self.players)
+
+    def _get_team_set(self, player):
+        if player in self.team1:
+            return self.team1_set
+        else:
+            return self.team2_set
+
+    def table(self):
+        return f"Sets:\n\nTeam1: {self.team1_sets}\n\nTeam2: {self.team2_sets}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n"
