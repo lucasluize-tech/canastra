@@ -18,6 +18,8 @@ class Table:
         self.new_hands = new_hands
         self.team1_sets = {}  # // {suit: [card_set, card_set]}
         self.team2_sets = {}
+        self.team1_hands = 0
+        self.team2_hands = 0
         self.team1 = []
         self.team2 = []
         self.trash = []
@@ -47,6 +49,25 @@ class Table:
             return self.team1_set
         else:
             return self.team2_set
+
+    def _get_team(self, player):
+        if player in self.team1:
+            return "1"
+        else:
+            return "2"
+
+    def _team_has_clean_canastra(self, player):
+        team = self._get_team(player)
+        if team == "1":
+            team_set = self.team1_sets
+        else:
+            team_set = self.team2_sets
+
+        for suit in team_set:
+            for s in team_set[suit]:
+                if s._is_clean() == False:
+                    return False
+        return True
 
     def table(self):
         return f"Sets:\n\nTeam1: {self.team1_sets}\n\nTeam2: {self.team2_sets}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n"

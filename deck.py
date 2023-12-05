@@ -50,15 +50,15 @@ class Deck:
 class Card:
     rank_order = {
         "Ace": 1,
-        "2": 2,
-        "3": 3,
-        "4": 4,
-        "5": 5,
-        "6": 6,
-        "7": 7,
-        "8": 8,
-        "9": 9,
-        "10": 10,
+        2: 2,
+        3: 3,
+        4: 4,
+        5: 5,
+        6: 6,
+        7: 7,
+        8: 8,
+        9: 9,
+        10: 10,
         "Jack": 11,
         "Queen": 12,
         "King": 13,
@@ -76,7 +76,7 @@ class Card:
         return f"({self.rank},{self.suit[0].capitalize()})"
 
     def _cmp_key(self):
-        return (self.rank_order[self.rank], self.suit_order[self.suit])
+        return (self.suit_order[self.suit], self.rank_order[self.rank])
 
     def __lt__(self, other):
         return self._cmp_key() < other._cmp_key()
@@ -113,3 +113,15 @@ class Card_set:
         self.cards.update(card_list)
         sorted_list = sorted(self.cards)
         self.cards = set(sorted_list)
+
+    def _is_clean(self):
+        sorted = sorted(self.cards)
+        for card, i in enumerate(self.cards):
+            """
+            For a canastra to be clean , 2 must be in the twos place.
+            * possible clean canastra: 2,3,4,5,6,7,8...
+            * possible clean canastra: A,2,3,4,5,6,7...
+            """
+            if card.rank == 2 and i == 0:
+                return False
+        return True

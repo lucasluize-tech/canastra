@@ -21,6 +21,12 @@ class Player:
         self.hand.append(card)
 
     def discard(self, card):
+        rank, suit = card.split(",")[0], card.split(",")[1].lower()
+        suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
+        if suit in suits:
+            suit = suits[suit]
+
+        card = self.get_card(rank, suit)
         self.hand.remove(card)
 
     def drop_set(self, card_list, suit, game):
@@ -38,6 +44,15 @@ class Player:
         else:
             raise ValueError("Cards do not extend the chosen set.")
 
+    def get_card(self, rank, suit):
+        if rank.isdigit():
+            rank = int(rank)
+
+        for card in self.hand:
+            if card.rank == rank and card.suit == suit:
+                return card
+        return None
+
     def get_trash(self, trash):
         self.hand.append(t for t in trash)
 
@@ -45,24 +60,48 @@ class Player:
         self.hand = hand
 
     def organize_hand(self):
-        for card in self.hand:
-            print(card)
+        # TODO: sort by suit and rank when called
+        return sorted(self.hand)
 
     def _is_play_valid(self, cards):
         """
         // check if all cards are in hand
         // have the same suit or card.rank == 2
         """
-
-        suit = cards[0].suit
         for card in cards:
-            if card not in self.hand:
+            rank, suit = card.split(",")[0], card.split(",")[1].lower()
+            suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
+            if suit in suits:
+                suit = suits[suit]
+
+            c = self.get_card(rank, suit)
+
+            if c not in self.hand:
                 print("Card not in hand.")
                 return False
-            if card.suit != suit:
-                if card.rank == 2:
+            if c.suit != suit:
+                if c.rank == 2:
                     continue
                 else:
                     print("A set of Cards must be of the same suit. Try again.")
                     return False
         return True
+
+    def chin(self, game):
+        team = self._get_team(game)
+        if team == "1":
+            if game.team1_hands == 2 and game._team_has_clean_canastra(self):
+                print(f"Game over! Team 1 finished the game!")
+                return True
+            else:
+                game.team1_hands += 1
+                self.get_new_hand(game.new_hands.pop())
+                return False
+        else:
+            if game.team2_hands == 2 and game._team_has_clean_canastra(self):
+                print(f"Game over! Team 2 finished the game!")
+                return True
+            else:
+                game.team2_hands += 1
+                self.get_new_hand(game.new_hands.pop())
+                return False

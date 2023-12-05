@@ -74,11 +74,14 @@ while game.game_over == False:
 
     print(f"Current player Hand: {sorted(current_player.hand)}\n")
 
-    # // SECOND MOVE: player play cards
+    # // SECOND MOVE: player play cards or move to discard
     while current_player.played == False:
         cards = input(
-            "Play a single or a set(3 or more cards same suit) \n(rank,suit  eg. set: Jack,C-Queen,C-King,C or single: Ace,C):"
+            'Play a single or a set or type "d" to move to discard(3 or more cards same suit) \n(rank,suit  eg. set: Jack,C-Queen,C-King,C or single: Ace,C):'
         )
+        if cards == "d":
+            current_player.played = True
+            break
         cards = cards.split("-")
         print(f"cards selected: {cards}")
         # ! make sure cards are not empty
@@ -88,7 +91,7 @@ while game.game_over == False:
 
         elif len(cards) >= 3:
             # // are cards valid?
-            valid = current.player.is_play_valid(cards)
+            valid = current_player._is_play_valid(cards)
             if valid == False:
                 continue
 
@@ -115,26 +118,63 @@ while game.game_over == False:
             set_to_add = input(f"Which set? (first = 0) :\n ${team_set[suit]} ")
             current_player.extend_set(cards, team_set[suit][set_to_add], game)
 
+        # // player needs new hand or game over?
+        if len(current_player.hand) == 0:
+            chin = current_player.chin(game)
+            if chin == True:
+                game.game_over = True
+                break
+
         more_plays = input("Play more cards? (y/n): ")
         if more_plays == "y":
             continue
 
-        # // THIRD MOVE: player discards a card
         else:
-            card_to_trash = input("Which card to trash? (rank,suit eg. Ace,S):  ")
-            valid = current_player.is_play_valid(card_to_trash)
-            current_player.discard(card_to_trash)
-            game.trash.add(card_to_trash)
-            # // player needs new hand or game over?
-            if len(current_player.hand) == []:
-                current_player.get_new_hand(game.new_hands.pop())
-            current.player.played = True
+            current_player.played = True
 
-    if current_player == player1:
+    if game.game_over == True:
+        break
+
+    # // THIRD MOVE: player discards a card
+    card_to_trash = input("Which card to trash? (rank,suit eg. Ace,S):  ")
+    valid = current_player._is_play_valid([card_to_trash])
+    current_player.discard(card_to_trash)
+    current_player.played = True
+    game.trash.append(card_to_trash)
+
+    # // player needs new hand or game over?
+    if len(current_player.hand) == 0:
+        chin = current_player.chin(game)
+        if chin is True:
+            game.game_over = True
+            break
+
+    # // next player
+    if current_player is player1:
         current_player = player2
-    elif current_player == player2:
+    elif current_player is player2:
         current_player = player3
-    elif current_player == player3:
+    elif current_player is player3:
         current_player = player4
     else:
         current_player = player1
+
+# // after game is over sum the points and declare the winner
+
+team1_points = 0
+team2_points = 0
+
+for suit in game.team1_sets:
+    for s in game.team1_sets[suit]:
+        team1_points += s._get_points()
+
+for suit in game.team2_sets:
+    for s in game.team2_sets[suit]:
+        team2_points += s._get_points()
+
+if team1_points > team2_points:
+    print(f"Team 1 wins with {team1_points} points!")
+elif team2_points > team1_points:
+    print(f"Team 2 wins with {team2_points} points!")
+else:
+    print(f"Team 1 and Team 2 are tied with {team1_points} points!")
