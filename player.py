@@ -1,4 +1,4 @@
-from deck import Card_set, Card
+from deck import Card
 from helpers import is_in_order, extends
 
 

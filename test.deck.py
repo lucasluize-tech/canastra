@@ -21,6 +21,8 @@ class Test(unittest.TestCase):
         for card in deck.cards:
             self.assertIsInstance(card, Card)
 
+        print(f"tested OK : right length and all cards are instances of Card\n")
+
     def test_shuffle(self):
         # ! testing if the first and last cards are different after shuffling
         deck = Deck(self.NUMBER_OF_DECKS)
@@ -31,18 +33,20 @@ class Test(unittest.TestCase):
         self.assertNotEqual(first, new_first)
         self.assertNotEqual(last, new_last)
 
+        print(f"tested OK : first and last cards are different after shuffling\n")
+
     def test_new_hands_creation(self):
         # ! testing # of new hands and if those cards are not in the deck
         deck = Deck(self.NUMBER_OF_DECKS)
         new_hands = [hand for hand in deck._deal_new_hands(self.NUMBER_OF_DECKS)]
         players = [
-            Player(i, self.names[i], new_hands[i])
-            for i in range(self.NUMBER_OF_PLAYERS)
+            Player(self.names[i], new_hands[i]) for i in range(self.NUMBER_OF_PLAYERS)
         ]
         game = Table(players, deck, new_hands[self.NUMBER_OF_PLAYERS :])
 
         self.assertEqual(len(new_hands), self.NUMBER_OF_NEW_HANDS)
         self.assertTrue(len(deck.cards) == (52 * self.NUMBER_OF_DECKS) - 4 * 11)
+        print(f"tested OK : # of new hands and if those cards are not in the deck\n")
 
 
 if __name__ == "__main__":
