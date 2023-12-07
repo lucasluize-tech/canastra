@@ -1,3 +1,7 @@
+from deck import Card_set, Card
+from helpers import is_in_order, extends
+
+
 class Player:
     def __init__(self, name, hand):
         self.name = name
@@ -18,73 +22,96 @@ class Player:
 
     def draw(self, deck):
         card = deck.deal()
+        print(f"\nYou drew {card} from the deck.\n")
         self.hand.append(card)
 
     def discard(self, card):
-        rank, suit = card.split(",")[0], card.split(",")[1].lower()
-        suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
-        if suit in suits:
-            suit = suits[suit]
-
-        card = self.get_card(rank, suit)
         self.hand.remove(card)
+        return card
 
     def drop_set(self, card_list, suit, game):
         team_set = game._get_team_set(self)
-        if new_set == None or new_set in team_set[suit]:
-            raise ValueError("You must choose a set to drop the cards.")
-        new_set = card_list
-
-    def extend_set(self, card_list, set_to_add, game):
-        s = set_to_add
-        # ! CARD_LIST must be SORTED BY RANK [(1,H),(2,H),(3,H)]
-        if s._extends(sorted(card_list)):
-            print(f"Adding {card_list} to {s}")
-            s._add_to_set(card_list)
+        card_list = sorted(card_list)
+        if team_set.get(suit) is None:
+            team_set[suit] = [(card_list)]
+            print(f"team set now is : {team_set}")
         else:
-            raise ValueError("Cards do not extend the chosen set.")
+            team_set[suit].append(card_list)
+            print(f"team set now is : {team_set}")
+        for card in card_list:
+            self.hand.remove(card)
 
-    def get_card(self, rank, suit):
-        if rank.isdigit():
-            rank = int(rank)
+    def can_extend_set(self, card_list, index, game):
+        team_set = game._get_team_set(self)[index]
+        if extends(team_set, card_list) is True:
+            print(f"Adding {card_list} to {team_set}")
+            team_set.append(card_list)
+            team_set = sorted(team_set)
+            return True
+        else:
+            print("\nCards do not extend the chosen set.")
+            return False
 
-        for card in self.hand:
-            if card.rank == rank and card.suit == suit:
-                return card
-        return None
+    def get_rank_and_suit(self, card):
+        if card is None:
+            raise ValueError("No cards selected.")
+        rank, suit = card.split(",")[0], card.split(",")[1].lower()
+        suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
+        suit = suits[suit]
+        new_card = self.get_card(rank, suit)
+
+        return new_card
+
+    def get_card(self, index):
+        self.hand = sorted(self.hand)
+        i = int(index) - 1
+        card = self.hand[i]
+        return card
 
     def get_trash(self, trash):
-        self.hand.append(t for t in trash)
+        for card in trash:
+            self.hand.append(card)
 
     def get_new_hand(self, hand):
         self.hand = hand
 
     def organize_hand(self):
-        # TODO: sort by suit and rank when called
         return sorted(self.hand)
 
     def _is_play_valid(self, cards):
         """
-        // check if all cards are in hand
-        // have the same suit or card.rank == 2
+        * cards must: be in hand
+        * have the same suit or card.rank == 2
+        * only two twos allowed per set if FOREVER DIRTY
+        * set must be n , n.rank +1, n.rank+2 if (len(n) == 3) and so on
         """
+        cur_card = cards[0]
+        num_of_twos = 0
+
+        # // 1. have the same suit or card.rank == 2
         for card in cards:
-            rank, suit = card.split(",")[0], card.split(",")[1].lower()
-            suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
-            if suit in suits:
-                suit = suits[suit]
-
-            c = self.get_card(rank, suit)
-
-            if c not in self.hand:
-                print("Card not in hand.")
+            if card not in self.hand:
+                print("Cards must be in hand. Try again.")
                 return False
-            if c.suit != suit:
-                if c.rank == 2:
-                    continue
-                else:
-                    print("A set of Cards must be of the same suit. Try again.")
+            if card.suit != cur_card.suit:
+                if card.rank != 2:
+                    print("Cards must be of the same suit. Try again.")
                     return False
+                else:
+                    # // 2. only two twos allowed per set 'FOREVER DIRTY'
+                    num_of_twos += 1
+                    if num_of_twos > 2:
+                        print("Only two twos allowed per set. Try again.")
+                        return False
+
+        # // 3. set must be n , n.rank +1, n.rank+2 if (len(n) == 3) and so on
+        if len(cards) > 2:
+            in_order = is_in_order(cards)
+            if in_order == False:
+                print("Cards must be in sequential order. Try again.")
+                return False
+            pass
+
         return True
 
     def chin(self, game):
@@ -105,3 +132,12 @@ class Player:
                 game.team2_hands += 1
                 self.get_new_hand(game.new_hands.pop())
                 return False
+
+    def is_over_or_new_hands(self, game):
+        if len(self.hand) == 0:
+            # chin also gets new hand if needed
+            chin = self.chin(game)
+            if chin == True:
+                return True
+            print(f" {self.name} needs got a new hand.")
+            return False

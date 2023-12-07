@@ -46,9 +46,9 @@ class Table:
 
     def _get_team_set(self, player):
         if player in self.team1:
-            return self.team1_set
+            return self.team1_sets
         else:
-            return self.team2_set
+            return self.team2_sets
 
     def _get_team(self, player):
         if player in self.team1:
@@ -69,5 +69,5 @@ class Table:
                     return False
         return True
 
-    def table(self):
-        return f"Sets:\n\nTeam1: {self.team1_sets}\n\nTeam2: {self.team2_sets}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n"
+    def table(self, current_player):
+        return f"Sets:\n\nTeam1: {self.team1_sets}\n\nTeam2: {self.team2_sets}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n{current_player.name}'s hand: {sorted(current_player.hand)}\n\n"

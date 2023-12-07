@@ -1,6 +1,7 @@
 from player import Player
 from deck import Deck
 from table import Table
+import pdb
 
 # ! time spent: 2h as of 11/29 11:20am
 
@@ -47,8 +48,9 @@ player1, player2, player3, player4 = (
 )
 
 # // Start game state loop:
+
+current_player = player1
 while game.game_over == False:
-    current_player = player1
     current_player.played = False
     print(
         f"\nCurrent player: {current_player.name}, Team: {current_player._get_team(game)}\n",
@@ -56,7 +58,7 @@ while game.game_over == False:
         "\n",
     )
     print("************************   Table   **********************: \n", "\n")
-    print(f"{game.table()}\n")
+    print(f"{game.table(current_player)}\n")
 
     # // FIRST MOVE : player draws a card or the trash
     move = input("Draw from deck or trash? (d/t): ")
@@ -71,83 +73,141 @@ while game.game_over == False:
             continue
         current_player.get_trash(game.trash)
         game.trash = []
-
-    print(f"Current player Hand: {sorted(current_player.hand)}\n")
+    current_player.hand = sorted(current_player.hand)
+    print(f"\nCurrent player Hand: {current_player.hand}\n")
 
     # // SECOND MOVE: player play cards or move to discard
     while current_player.played == False:
         cards = input(
-            'Play a single or a set or type "d" to move to discard(3 or more cards same suit) \n(rank,suit  eg. set: Jack,C-Queen,C-King,C or single: Ace,C):'
+            f'\nPlay a single or a set or type "d" to move to discard\nchoose a card from hand\n ex. "1" for {current_player.hand[0]}, "2" for {current_player.hand[1]}, and "1,2,3" for a set): '
         )
+
+        # // player wants to discard
         if cards == "d":
-            current_player.played = True
-            break
-        cards = cards.split("-")
-        print(f"cards selected: {cards}")
+            # // THIRD MOVE: player discards a card
+            card_to_trash = input(
+                f"\nWhich card to trash? ({current_player.hand[0]} = 1, and so on...):  "
+            )
+            if card_to_trash == "":
+                print("No card selected. Try again.")
+                continue
+            card_to_trash = current_player.get_card(card_to_trash)
+            confirmation = input(
+                f"are you sure you want to discard {card_to_trash}? (y/n): "
+            )
+            if confirmation == "n":
+                continue
+            else:
+                current_player.played = True
+                discarded = current_player.discard(card_to_trash)
+                game.trash.append(discarded)
+                break
+
+        # * since we are using indexes, we need to sort the hand
+        current_player.hand = sorted(current_player.hand)
+        selected_cards = sorted(cards.split(","))
+
         # ! make sure cards are not empty
-        if len(cards) < 0:
+        if len(selected_cards) < 0:
             print("No cards selected. Try again.")
             continue
+        # ! make sure input is valid
+        elif len(selected_cards) > len(current_player.hand):
+            print("Too many cards selected. Try again.")
+            continue
 
-        elif len(cards) >= 3:
+        # ! grab cards from hand unsing indexes
+        print(f"number in hand of selected cards : {selected_cards}")
+        got_cards = False
+        for i in range(1, len(selected_cards) + 1):
+            try:
+                selected_cards[i - 1] = int(selected_cards[i - 1])
+                c = current_player.get_card(selected_cards[i - 1])
+                selected_cards[i - 1] = c
+            except ValueError:
+                print("\nInvalid input. Try again with numbers separated by commas.")
+                break
+            got_cards = True
+
+        if got_cards == False:
+            continue
+
+        print(f"\ncards selected: {selected_cards}")
+        # ! grab the team set state
+        team_set = game._get_team_set(current_player)
+
+        if len(selected_cards) >= 3:
             # // are cards valid?
-            valid = current_player._is_play_valid(cards)
+            valid = current_player._is_play_valid(selected_cards)
             if valid == False:
                 continue
 
             # // new or existing set?
-            new_or_existing = input("New set or add to existing set? (n/e): ")
-            team_set = game._get_team_set(current_player)
+            suit = selected_cards[-1].suit
+            new_or_existing = input("\nNew set or add to existing set? (n/e): ")
             if new_or_existing == "n":
-                suit = input("Which suit? (c,d,h,s): ")
-                if suit == "c":
-                    suit = "Clubs"
-                elif suit == "d":
-                    suit = "Diamonds"
-                elif suit == "h":
-                    suit = "Hearts"
-                else:
-                    suit = "Spades"
-                current_player.drop_set(cards, suit, game)
+                current_player.drop_set(selected_cards, suit, game)
             else:
-                set_to_add = input(f"Which set? (first = 0) :\n ${team_set[suit]} ")
-                current_player.extend_set(cards, team_set[suit][set_to_add], game)
-
+                index_of_set = input(f"\nWhich set? (first = 0) :\n ${team_set[suit]} ")
+                extended = current_player.can_extend_set(
+                    selected_cards, index_of_set, game
+                )
+                if extended == False:
+                    continue
         else:
+            # // is card valid?
+            valid = current_player._is_play_valid(selected_cards)
+            if valid == False:
+                continue
+
             # // single card to existing set?
-            set_to_add = input(f"Which set? (first = 0) :\n ${team_set[suit]} ")
-            current_player.extend_set(cards, team_set[suit][set_to_add], game)
+            card = selected_cards[0]
+            if team_set.get(card.suit) == None:
+                print("No sets of that suit to add. Try again.")
+                continue
 
-        # // player needs new hand or game over?
-        if len(current_player.hand) == 0:
-            chin = current_player.chin(game)
-            if chin == True:
-                game.game_over = True
-                break
+            set_to_add = input(f"\nWhich set? (first = 0) :\n ${team_set[card.suit]} ")
+            current_player.extend_set(selected_cards, team_set[suit][set_to_add], game)
 
-        more_plays = input("Play more cards? (y/n): ")
+        # // player needs new hand after move to coninue or game over?
+        chin = current_player.is_over_or_new_hands(game)
+        if chin == True:
+            game.game_over = True
+            break
+
+        print(f"\nCurrent player Hand: {current_player.hand}\n")
+
+        # // keep playing or move to discard?
+        more_plays = input("\nPlay more cards? (y/n): ")
         if more_plays == "y":
             continue
 
         else:
-            current_player.played = True
+            # // THIRD MOVE: player discards a card
+            card_to_trash = input(
+                f"\nWhich card to trash? ({current_player.hand[0]} = 1, and so on...):  "
+            )
+            if card_to_trash == "":
+                print("No card selected. Try again.")
+                continue
+            card_to_trash = current_player.get_card(card_to_trash)
+            confirmation = input(
+                f"are you sure you want to discard {card_to_trash}? (y/n)"
+            )
+            if confirmation == "n":
+                continue
+            else:
+                discarded = current_player.discard(card_to_trash)
+                game.trash.append(discarded)
+                current_player.played = True
+
+                chin = current_player.is_over_or_new_hands(game)
+                if chin == True:
+                    game.game_over = True
+                    break
 
     if game.game_over == True:
         break
-
-    # // THIRD MOVE: player discards a card
-    card_to_trash = input("Which card to trash? (rank,suit eg. Ace,S):  ")
-    valid = current_player._is_play_valid([card_to_trash])
-    current_player.discard(card_to_trash)
-    current_player.played = True
-    game.trash.append(card_to_trash)
-
-    # // player needs new hand or game over?
-    if len(current_player.hand) == 0:
-        chin = current_player.chin(game)
-        if chin is True:
-            game.game_over = True
-            break
 
     # // next player
     if current_player is player1:
@@ -173,8 +233,8 @@ for suit in game.team2_sets:
         team2_points += s._get_points()
 
 if team1_points > team2_points:
-    print(f"Team 1 wins with {team1_points} points!")
+    print(f"\n\nTeam 1 wins with {team1_points} points!")
 elif team2_points > team1_points:
-    print(f"Team 2 wins with {team2_points} points!")
+    print(f"\n\neam 2 wins with {team2_points} points!")
 else:
-    print(f"Team 1 and Team 2 are tied with {team1_points} points!")
+    print(f"\n\nTeam 1 and Team 2 are tied with {team1_points} points!")
