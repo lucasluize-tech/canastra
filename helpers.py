@@ -1,8 +1,16 @@
-# ALL COMMENT FOLLOWED BY ! IN THIS FILE ARE FOR TESTING PURPOSES ONLY
+# ! ALL COMMENT FOLLOWED BY ! IN THIS FILE ARE FOR TESTING PURPOSES ONLY
+"""
+// This file contains helper functions for the canastra game
+// is_in_order: checks if a list of cards is in sequential order
+// rank_to_number: converts a card's rank to a number(Ace can be 1 or 14)
+// extends: checks if a set of cards can be extended with a list of cards
+// is_clean: checks if a list of cards is a clean canastra
+"""
 
 
 def is_in_order(cards):
     # Get the first and last cards in the list
+    cards = sorted(cards)
     first, last = cards[0], cards[-1]
     # ! print(cards)
     # Check if the first card is an Ace and the last card is a King or a joker
@@ -43,8 +51,13 @@ def is_in_order(cards):
                 return False
 
         # Check if the current card's rank is not one more than the previous card's rank
-        elif current_rank != previous_rank + 1 and first.rank != 2:
-            return False
+        else:
+            # lets say A,10,j,Q,K
+            if previous_rank == 14:
+                if current_rank + 1 != next_rank:
+                    return False
+            elif current_rank != previous_rank + 1 and first.rank != 2:
+                return False
 
     # If all checks pass, return True
     return True
@@ -63,17 +76,34 @@ def rank_to_number(rank, high_ace=False):
         return rank
 
 
-def extends(chosen_set, card_list):
-    num_of_twos = 0
-    for card in chosen_set:
-        if card.rank == 2:
-            num_of_twos += 1
+def extends_set(chosen_set, card_list):
+    """
+    // extends if :
+    // only a sigle "2" of the same suit is allowed per set
+    // new cards must not be in the set
+    // cannot have two cards of the same rank in the set
+    """
+    num_of_twos = len([card for card in chosen_set if card.rank == 2])
+    # ! print(
+    #     f"num_of_twos: {num_of_twos}, chosen_set: {chosen_set}, card_list: {card_list}"
+    # )
 
-    for card in card_list:
-        if card.rank != 2 and card in chosen_set:
-            return False
-        if card.rank == 2 and num_of_twos > 1:
-            return False
+    for s in chosen_set:
+        # ! print(f"s: {s.rank}, prev: {prev}")
+        suit = chosen_set[-1].suit
+        if s.rank == "Ace" and prev == 1:
+            continue
+
+        for card in card_list:
+            # !print(f"card: {card.rank}, suit: {suit}")
+            if card.rank == s.rank and card.rank != 2:
+                return False
+            if card.rank == 2 and card.suit == suit:
+                return False
+        prev = rank_to_number(card.rank)
+
+    if num_of_twos > 2:
+        return False
 
     return True
 

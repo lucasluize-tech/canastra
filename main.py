@@ -52,17 +52,17 @@ player1, player2, player3, player4 = (
 current_player = player1
 while game.game_over == False:
     current_player.played = False
+    print("************************   Table   **********************: \n", "\n")
     print(
-        f"\nCurrent player: {current_player.name}, Team: {current_player._get_team(game)}\n",
+        f"Current player: {current_player.name}, Team: {current_player._get_team(game)}",
         "\n",
         "\n",
     )
-    print("************************   Table   **********************: \n", "\n")
     print(f"{game.table(current_player)}\n")
 
     # // FIRST MOVE : player draws a card or the trash
     move = input("Draw from deck or trash? (d/t): ")
-    if move == "":
+    if move != "d" and move != "t":
         print("No move selected. Try again.")
         continue
     if move == "d":
@@ -74,7 +74,8 @@ while game.game_over == False:
         current_player.get_trash(game.trash)
         game.trash = []
     current_player.hand = sorted(current_player.hand)
-    print(f"\nCurrent player Hand: {current_player.hand}\n")
+    print(f"\nHand: {current_player.hand}\n")
+    print(f"hand: {[i for i in range(1,len(current_player.hand)+ 1)]}")
 
     # // SECOND MOVE: player play cards or move to discard
     while current_player.played == False:
@@ -88,13 +89,21 @@ while game.game_over == False:
             card_to_trash = input(
                 f"\nWhich card to trash? ({current_player.hand[0]} = 1, and so on...):  "
             )
-            if card_to_trash == "":
+            if (
+                card_to_trash == ""
+                or int(card_to_trash) > len(current_player.hand)
+                or card_to_trash.isdigit() == False
+            ):
                 print("No card selected. Try again.")
                 continue
+
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
-                f"are you sure you want to discard {card_to_trash}? (y/n): "
+                f"are you sure you want to discard {card_to_trash} (y/n)?: "
             )
+            if confirmation == "n" and confirmation != "y":
+                print("\nInvalid input. Try again.")
+                continue
             if confirmation == "n":
                 continue
             else:
@@ -109,11 +118,11 @@ while game.game_over == False:
 
         # ! make sure cards are not empty
         if len(selected_cards) < 0:
-            print("No cards selected. Try again.")
+            print("\nNo cards selected. Try again.")
             continue
         # ! make sure input is valid
         elif len(selected_cards) > len(current_player.hand):
-            print("Too many cards selected. Try again.")
+            print("\nToo many cards selected. Try again.")
             continue
 
         # ! grab cards from hand unsing indexes
@@ -145,10 +154,17 @@ while game.game_over == False:
             # // new or existing set?
             suit = selected_cards[-1].suit
             new_or_existing = input("\nNew set or add to existing set? (n/e): ")
+            if new_or_existing != "n" and new_or_existing != "e":
+                print("\nInvalid input. Try again.")
+                continue
             if new_or_existing == "n":
                 current_player.drop_set(selected_cards, suit, game)
             else:
-                index_of_set = input(f"\nWhich set? (first = 0) :\n ${team_set[suit]} ")
+                index_of_set = input(
+                    f"\nWhich set? (first = 0) or enter to cancel :\n ${team_set[suit]} "
+                )
+                if index_of_set.isdigit() == False:
+                    continue
                 extended = current_player.can_extend_set(
                     selected_cards, index_of_set, game
                 )
@@ -166,20 +182,29 @@ while game.game_over == False:
                 print("No sets of that suit to add. Try again.")
                 continue
 
-            set_to_add = input(f"\nWhich set? (first = 0) :\n ${team_set[card.suit]} ")
-            current_player.extend_set(selected_cards, team_set[suit][set_to_add], game)
+            index_of_set = input(
+                f"\nWhich set? (first = 0) or enter to cancel :\n ${team_set[suit]} "
+            )
+            if index_of_set.isdigit() == False:
+                continue
+            current_player.can_extend_set(
+                selected_cards, team_set[suit][index_of_set], game
+            )
 
-        # // player needs new hand after move to coninue or game over?
+        # // player needs new hand after move to continue or game over?
         chin = current_player.is_over_or_new_hands(game)
         if chin == True:
             game.game_over = True
             break
 
         print(f"\nCurrent player Hand: {current_player.hand}\n")
+        print(
+            f"hand from {current_player.hand.index(current_player.hand[0])+1} to {current_player.hand.index(current_player.hand[-1])+1}"
+        )
 
         # // keep playing or move to discard?
         more_plays = input("\nPlay more cards? (y/n): ")
-        if more_plays == "y":
+        if more_plays != "n":
             continue
 
         else:
@@ -187,14 +212,19 @@ while game.game_over == False:
             card_to_trash = input(
                 f"\nWhich card to trash? ({current_player.hand[0]} = 1, and so on...):  "
             )
-            if card_to_trash == "":
-                print("No card selected. Try again.")
+
+            if (
+                card_to_trash == ""
+                or int(card_to_trash) > len(current_player.hand)
+                or card_to_trash.isdigit() == False
+            ):
+                print("Invalid choice. Try again.")
                 continue
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
                 f"are you sure you want to discard {card_to_trash}? (y/n)"
             )
-            if confirmation == "n":
+            if confirmation != "y":
                 continue
             else:
                 discarded = current_player.discard(card_to_trash)

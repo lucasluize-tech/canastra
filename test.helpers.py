@@ -1,7 +1,7 @@
 import unittest
 import pdb
 from deck import Card
-from helpers import is_in_order, rank_to_number, is_clean
+from helpers import is_in_order, rank_to_number, is_clean, extends_set
 from random import shuffle
 from deck import Card
 
@@ -44,7 +44,7 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(sorted_cards[9].rank, 3)
         self.assertEqual(sorted_cards[10].rank, 9)
 
-        print(f"sorted_cards: TRUE")
+        print(f"test OK : sorted_cards")
 
     def test_is_in_order(self):
         # Test with a simple sequence
@@ -55,41 +55,57 @@ class TestHelpers(unittest.TestCase):
         # Test with a sequence containing a joker
         cards = [Card("Hearts", 2), Card("Hearts", 4), Card("Hearts", 5)]
         self.assertTrue(is_in_order(cards))
-        print(f"tested OK : a sequence containing a joker 2,4,5\n")
+        print(f"tested OK : joker front: 2,4,5\n")
 
         # Test with a sequence containing an Ace and a joker
-        cards = [Card("Hearts", "Ace"), Card("Hearts", 2), Card("Hearts", 3)]
+        cards = [
+            Card("Hearts", "Ace"),
+            Card("Hearts", 2),
+            Card("Hearts", 3),
+            Card("Hearts", 4),
+        ]
         self.assertTrue(is_in_order(cards))
-        print(f"tested OK : a sequence containing an Ace and a joker Ace,2,3\n")
+        print(f"tested OK : Ace low joker as 2: Ace,2,3,4\n")
 
         # Test with a sequence containing a joker in the middle
         cards = [Card("Hearts", 4), Card("Hearts", 2), Card("Hearts", 6)]
         self.assertTrue(is_in_order(cards))
-        print(f"tested OK : a sequence containing a joker in the middle 4,2,6\n")
+        print(f"tested OK :joker in the middle: 4,2,6\n")
 
         # Test with a sequence containing a Queen, a joker, and an Ace
         cards = [Card("Hearts", "Queen"), Card("Hearts", 2), Card("Hearts", "Ace")]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing a Queen, a joker, and an Ace \n")
+        print(f"tested OK : Ace high joker in the middle: Q,2,A \n")
 
         # Test with a sequence containing a King, a joker, and an Ace
         cards = [Card("Hearts", "King"), Card("Hearts", 2), Card("Hearts", "Ace")]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing a King, a joker, and an Ace\n")
+        print(f"tested OK : Ace high joker beginning: 2, K, A\n")
 
         # Test with a sequence containing 2, J, and K
         cards = [Card("Hearts", 2), Card("Hearts", "Jack"), Card("Hearts", "King")]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing 2, J, and K\n")
+        print(f"tested OK : no Ace figures and joker: 2,J,K\n")
+
+        # Test with a sequence with Ace high until King
+        cards = [
+            Card("Hearts", "Ace"),
+            Card("Hearts", "Jack"),
+            Card("Hearts", "Queen"),
+            Card("Hearts", "King"),
+        ]
+        sorted_cards = sorted(cards)
+        self.assertTrue(is_in_order(sorted_cards))
+        print(f"tested OK : Ace High clean: J,Q,K,A\n")
 
         # Test with a sequence containing 9, 2, and J
         cards = [Card("Hearts", 9), Card("Hearts", 2), Card("Hearts", "Jack")]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing 9, 2, and J\n")
+        print(f"tested OK : joker middle, number and figure: 9,2,J\n")
 
         # Test with a sequence containing 2,3,5,6
         cards = [
@@ -100,7 +116,7 @@ class TestHelpers(unittest.TestCase):
         ]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing 2,3,5,6\n")
+        print(f"tested OK : clean with 2: 2,3,5,6\n")
 
         # Test with a sequence containing 3,5,2,7,8
         cards = [
@@ -112,7 +128,8 @@ class TestHelpers(unittest.TestCase):
         ]
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : a sequence containing 3,5,2,7,8\n")
+        print(f"tested OK : not clean order with 2: 3,5,2,7,8\n")
+        print("****  end of is_in_order tests ****\n")
 
     def test_is_clean(self):
         # Test case 1: 3,4,5,6,7,8 - False
@@ -164,6 +181,80 @@ class TestHelpers(unittest.TestCase):
         cards9.append(Card("Spades", 2))
         self.assertFalse(is_clean(cards9))
         print(f"tested OK : more than 1 two\n")
+        print("****  end of is_clean tests ****\n")
+
+    def test_extends(self):
+        chosen_set = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=3, suit="Hearts"),
+            Card(rank=4, suit="Hearts"),
+        ]
+        card_list = [Card(rank=5, suit="Hearts")]
+        self.assertTrue(extends_set(chosen_set, card_list))
+        print(f"tested OK : 5 extends_set 2,3,4\n")
+
+        chosen_set = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=3, suit="Hearts"),
+            Card(rank=4, suit="Hearts"),
+        ]
+        card_list = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=5, suit="Hearts"),
+            Card(rank=6, suit="Hearts"),
+        ]
+        self.assertFalse(extends_set(chosen_set, card_list))
+        print(f"test OK : 2 jokers same suit\n")
+
+        chosen_set = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=3, suit="Hearts"),
+            Card(rank=4, suit="Hearts"),
+        ]
+        card_list = [
+            Card(rank=2, suit="Spades"),
+            Card(rank=6, suit="Hearts"),
+            Card(rank=7, suit="Hearts"),
+        ]
+        self.assertTrue(extends_set(chosen_set, card_list))
+        print(f"test OK : 2 jokers different suit\n")
+
+        chosen_set = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=3, suit="Hearts"),
+            Card(rank=4, suit="Hearts"),
+        ]
+        card_list = [
+            Card(rank=2, suit="Spades"),
+            Card(rank=2, suit="Hearts"),
+            Card(rank=7, suit="Hearts"),
+        ]
+        self.assertFalse(extends_set(chosen_set, card_list))
+        print(f"test OK : 3 jokers ?? \n")
+
+        chosen_set = [
+            Card(rank=2, suit="Hearts"),
+            Card(rank=3, suit="Hearts"),
+            Card(rank=4, suit="Hearts"),
+        ]
+        card_list = [
+            Card(rank="Ace", suit="Hearts"),
+            Card(rank=5, suit="Hearts"),
+        ]
+        self.assertTrue(extends_set(chosen_set, card_list))
+        print(f"test OK : extends_set both sides A,5 - 2,3,4\n")
+
+        chosen_set = [Card("Hearts", rank) for rank in range(2, 11)]
+        add = [Card("Hearts", "Jack"), Card("Hearts", "Queen"), Card("Hearts", "King")]
+        chosen_set.extend(add)
+
+        chosen_set = sorted(chosen_set)
+        card_list = [
+            Card(rank="Ace", suit="Hearts"),
+            Card(rank="Ace", suit="Hearts"),
+        ]
+        self.assertTrue(extends_set(chosen_set, card_list))
+        print(f"test OK : extends_set Ace high and Low 1000pts!\n")
 
 
 if __name__ == "__main__":

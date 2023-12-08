@@ -1,5 +1,5 @@
 from deck import Card
-from helpers import is_in_order, extends
+from helpers import is_in_order, extends_set
 
 
 class Player:
@@ -43,7 +43,7 @@ class Player:
 
     def can_extend_set(self, card_list, index, game):
         team_set = game._get_team_set(self)[index]
-        if extends(team_set, card_list) is True:
+        if extends_set(team_set, card_list) is True:
             print(f"Adding {card_list} to {team_set}")
             team_set.append(card_list)
             team_set = sorted(team_set)
@@ -89,6 +89,7 @@ class Player:
         num_of_twos = 0
 
         # // 1. have the same suit or card.rank == 2
+        prev = None
         for card in cards:
             if card not in self.hand:
                 print("Cards must be in hand. Try again.")
@@ -103,6 +104,7 @@ class Player:
                     if num_of_twos > 2:
                         print("Only two twos allowed per set. Try again.")
                         return False
+            prev = card
 
         # // 3. set must be n , n.rank +1, n.rank+2 if (len(n) == 3) and so on
         if len(cards) > 2:
