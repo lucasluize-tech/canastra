@@ -1,9 +1,13 @@
 import unittest
 import pdb
 from deck import Card
-from helpers import is_in_order, rank_to_number, is_clean, extends_set
+from helpers import is_in_order, rank_to_number, is_clean, extends_set, points_for_set
 from random import shuffle
 from deck import Card
+from colored import fore, back, style
+
+color = f'{fore("green")}{style(1)}'
+reset = f"{style(0)}"
 
 
 class TestHelpers(unittest.TestCase):
@@ -16,6 +20,7 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(rank_to_number(10), 10)
 
     def test_sorting_cards(self):
+        print(f"{color}****  start of sorting_cards ****\n{reset}{reset}")
         # unordered list of cards
         cards = [
             Card("Hearts", 4),
@@ -47,6 +52,7 @@ class TestHelpers(unittest.TestCase):
         print(f"test OK : sorted_cards")
 
     def test_is_in_order(self):
+        print(f"{color}**** start of is_in_order tests ****\n{reset}{reset}")
         # Test with a simple sequence
         cards = [Card("Hearts", rank) for rank in range(3, 6)]
         self.assertTrue(is_in_order(cards))
@@ -129,15 +135,15 @@ class TestHelpers(unittest.TestCase):
         sorted_cards = sorted(cards)
         self.assertTrue(is_in_order(sorted_cards))
         print(f"tested OK : not clean order with 2: 3,5,2,7,8\n")
-        print("****  end of is_in_order tests ****\n")
 
     def test_is_clean(self):
+        print(f"{color}****  start of is_clean tests ****\n{reset}")
         # Test case 1: 3,4,5,6,7,8 - False
         cards1 = [Card("Hearts", rank) for rank in range(3, 9)]
         self.assertFalse(is_clean(cards1))
         print(f"tested OK : not 7 cards in length\n")
-        # Test case 2: 3,4,5,6,2,8 - False
-        cards2 = [Card("Hearts", rank) for rank in [3, 4, 5, 6, 2, 8]]
+        # Test case 2: 3,4,5,6,2,8,9 - False
+        cards2 = [Card("Hearts", rank) for rank in [3, 4, 5, 6, 2, 8, 9]]
         self.assertFalse(is_clean(cards2))
         print(f"tested OK : 2 in the middle\n")
         # Test case 3: 2,3,4,5,6,7,8 - True
@@ -181,9 +187,9 @@ class TestHelpers(unittest.TestCase):
         cards9.append(Card("Spades", 2))
         self.assertFalse(is_clean(cards9))
         print(f"tested OK : more than 1 two\n")
-        print("****  end of is_clean tests ****\n")
 
     def test_extends(self):
+        print(f"{color}**** start of extends_set tests ****\n{reset}")
         chosen_set = [
             Card(rank=2, suit="Hearts"),
             Card(rank=3, suit="Hearts"),
@@ -255,6 +261,50 @@ class TestHelpers(unittest.TestCase):
         ]
         self.assertTrue(extends_set(chosen_set, card_list))
         print(f"test OK : extends_set Ace high and Low 1000pts!\n")
+
+    def test_points_from_set(self):
+        print(f"{color}**** start of points_for_set tests ****\n{reset}")
+        # Test case 1: 3,4,5,6,7,8 - 0 points
+        cards1 = [Card("Hearts", rank) for rank in range(3, 9)]
+        self.assertEqual(points_for_set(cards1), 0)
+        print(f"tested OK : 0 points for 3,4,5,6,7,8\n")
+
+        # Test case 2: 3,4,5,6,2,8,9 - 100 points
+        cards2 = [Card("Hearts", rank) for rank in [3, 4, 5, 6, 2, 8, 9]]
+        self.assertEqual(points_for_set(cards2), 100)
+        print(f"tested OK : 100 points for 3,4,5,6,2,8,9\n")
+
+        # Test case 3: 2,3,4,5,6,7,8 - 200 points
+        cards3 = [Card("Hearts", rank) for rank in range(2, 9)]
+        self.assertEqual(points_for_set(cards3), 200)
+        print(f"tested OK : 200 points for 2,3,4,5,6,7,8\n")
+
+        # Test case 4: A,2,3,4,5,6,7,8,9,10,Jack,Queen,King - 500 points
+        cards4 = [Card("Hearts", rank) for rank in range(2, 11)]
+        add = [
+            Card("Hearts", "Jack"),
+            Card("Hearts", "Queen"),
+            Card("Hearts", "King"),
+            Card("Hearts", "Ace"),
+        ]
+        cards4.extend(add)
+        cards4 = sorted(cards4)
+        self.assertEqual(points_for_set(cards4), 500)
+        print(f"tested OK : 500 points for A --> King\n")
+
+        # test case 5: A --> A - 1000 points
+        cards5 = [Card("Hearts", rank) for rank in range(2, 11)]
+        add = [
+            Card("Hearts", "Jack"),
+            Card("Hearts", "Queen"),
+            Card("Hearts", "King"),
+            Card("Hearts", "Ace"),
+            Card("Hearts", "Ace"),
+        ]
+        cards5.extend(add)
+        cards5 = sorted(cards5)
+        self.assertEqual(points_for_set(cards5), 1000)
+        print(f"tested OK : 1000 points for A --> A\n")
 
 
 if __name__ == "__main__":
