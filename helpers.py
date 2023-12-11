@@ -5,6 +5,7 @@
 // rank_to_number: converts a card's rank to a number(Ace can be 1 or 14)
 // extends: checks if a set of cards can be extended with a list of cards
 // is_clean: checks if a list of cards is a clean canastra
+// points_for_set: calculates the points for a set of cards
 """
 
 
@@ -109,11 +110,11 @@ def extends_set(chosen_set, card_list):
 
 
 def is_clean(card_list):
-    # ! print(f"\ncard_list: {card_list}")
     if len(card_list) < 7:
         return False
 
     card_list = sorted(card_list)
+    # !print(f"\ncard_list: {card_list}")
     first, last = card_list[0], card_list[-1]
     num_of_twos = len([card for card in card_list if card.rank == 2])
     high_ace = True if last.rank == "King" else False
@@ -129,13 +130,43 @@ def is_clean(card_list):
         cur = rank_to_number(card_list[i].rank, high_ace)
         prev = rank_to_number(card_list[i - 1].rank, high_ace)
         Next = rank_to_number(card_list[i + 1].rank, high_ace)
+        # ! print(f"cur: {cur}, prev: {prev}, Next: {Next}")
 
         if num_of_twos > 1:
             return False
         if cur == 2 and prev != 1 and Next != 3:
             return False
         else:
-            if prev != cur - 1 and Next != cur + 1:
+            if prev != cur - 1 or Next != cur + 1:
+                if prev == 14:
+                    continue
                 return False
 
     return True
+
+
+def points_for_set(s):
+    """
+    * clen from A->A: 1000
+    * clean from A->K: 500
+    * clean canastra: 200
+    * dirty canastra: 100
+    * cards on the table: 10/each but this will be handled on the main file
+    """
+    points = 0
+    first, second, last = s[0], s[1], s[-1]
+
+    if first.rank == "Ace" and second.rank == "Ace" and len(s) == 14:
+        points += 1000
+
+    elif first.rank == "Ace" and last.rank == "King" and len(s) == 13:
+        points += 500
+
+    elif is_clean(s) == True:
+        points += 200
+
+    elif is_clean(s) == False and len(s) >= 7:
+        points += 100
+    else:
+        return points
+    return points
