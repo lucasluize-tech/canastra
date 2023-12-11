@@ -41,12 +41,11 @@ class Player:
         for card in card_list:
             self.hand.remove(card)
 
-    def can_extend_set(self, card_list, index, game):
-        team_set = game._get_team_set(self)[index]
-        if extends_set(team_set, card_list) is True:
-            print(f"Adding {card_list} to {team_set}")
-            team_set.append(card_list)
-            team_set = sorted(team_set)
+    def can_extend_set(self, card_list, s, game):
+        if extends_set(s, card_list) is True:
+            print(f"Adding {card_list} to {s}")
+            s.append(card_list)
+            s = sorted(s)
             return True
         else:
             print("\nCards do not extend the chosen set.")
