@@ -3,9 +3,10 @@ from deck import Deck
 from table import Table
 import pdb
 
-# ! time spent: 2h as of 11/29 11:20am
+# ! time spent: 20 hours so far
 
 """
+
   - Let's play Canastra!
 
   - This is the main file of the game. It will be responsible for the game loop and the game state.
@@ -188,7 +189,7 @@ while game.game_over == False:
             if index_of_set.isdigit() == False:
                 continue
             current_player.can_extend_set(
-                selected_cards, team_set[suit][index_of_set], game
+                selected_cards, team_set[suit][int(index_of_set)], game
             )
 
         # // player needs new hand after move to continue or game over?
