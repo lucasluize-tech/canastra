@@ -1,7 +1,7 @@
 from player import Player
 from deck import Deck
 from table import Table
-import pdb
+from colored import Fore, Back, Style
 
 # ! time spent: 20 hours so far
 
@@ -51,9 +51,16 @@ player1, player2, player3, player4 = (
 # // Start game state loop:
 
 current_player = player1
+error, reset = f"{Fore.WHITE}{Back.dark_red_1}", f"{Style.RESET}"
+action = f"{Back.GRAY}"
 while game.game_over == False:
+    color = (
+        Fore.YELLOW
+        if current_player is player1 or current_player is player3
+        else Fore.BLUE
+    )
     current_player.played = False
-    print("************************   Table   **********************: \n", "\n")
+    print(f"{color}************************   Table   **********************: \n", "\n")
     print(
         f"Current player: {current_player.name}, Team: {current_player._get_team(game)}",
         "\n",
@@ -62,15 +69,15 @@ while game.game_over == False:
     print(f"{game.table(current_player)}\n")
 
     # // FIRST MOVE : player draws a card or the trash
-    move = input("Draw from deck or trash? (d/t): ")
+    move = input(f"{action}Draw from deck or trash? (d/t): {reset}")
     if move != "d" and move != "t":
-        print("No move selected. Try again.")
+        print(f"{error}No move selected. Try again.{reset}")
         continue
     if move == "d":
         current_player.draw(game.deck)
     else:
         if len(game.trash) == 0:
-            print("Trash is empty. Draw from deck.")
+            print(f"{error}Trash is empty. Draw from deck.{reset}")
             continue
         current_player.get_trash(game.trash)
         game.trash = []
@@ -81,29 +88,29 @@ while game.game_over == False:
     # // SECOND MOVE: player play cards or move to discard
     while current_player.played == False:
         cards = input(
-            f'\nPlay a single or a set or type "d" to move to discard\nchoose a card from hand\n ex. "1" for {current_player.hand[0]}, "2" for {current_player.hand[1]}, and "1,2,3" for a set): '
+            f'{action}\nPlay a single or a set or type "d" to move to discard\nchoose a card from hand\n ex. "1" for {current_player.hand[0]}, "2" for {current_player.hand[1]}, and "1,2,3" for a set): {reset}'
         )
 
         # // player wants to discard
         if cards == "d":
             # // THIRD MOVE: player discards a card
             card_to_trash = input(
-                f"\nWhich card to trash? ({current_player.hand[0]} = 1, and so on...):  "
+                f"\n{action}Which card to trash? ({current_player.hand[0]} = 1, and so on...):  {reset}"
             )
             if (
                 card_to_trash == ""
                 or int(card_to_trash) > len(current_player.hand)
                 or card_to_trash.isdigit() == False
             ):
-                print("No card selected. Try again.")
+                print(f"{error}No card selected. Try again.{reset}")
                 continue
 
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
-                f"are you sure you want to discard {card_to_trash} (y/n)?: "
+                f"{Fore.GREEN}are you sure you want to discard {card_to_trash} (y/n)?: {reset}"
             )
             if confirmation == "n" and confirmation != "y":
-                print("\nInvalid input. Try again.")
+                print(f"\n{error}Invalid input. Try again.{reset}")
                 continue
             if confirmation == "n":
                 continue
@@ -119,11 +126,11 @@ while game.game_over == False:
 
         # ! make sure cards are not empty
         if len(selected_cards) < 0:
-            print("\nNo cards selected. Try again.")
+            print(f"\n{error}No cards selected. Try again.{reset}")
             continue
         # ! make sure input is valid
         elif len(selected_cards) > len(current_player.hand):
-            print("\nToo many cards selected. Try again.")
+            print(f"\n{error}Too many cards selected. Try again.{reset}")
             continue
 
         # ! grab cards from hand unsing indexes
@@ -135,7 +142,9 @@ while game.game_over == False:
                 c = current_player.get_card(selected_cards[i - 1])
                 selected_cards[i - 1] = c
             except ValueError:
-                print("\nInvalid input. Try again with numbers separated by commas.")
+                print(
+                    f"\n{error}Invalid input. Try again with numbers separated by commas.{reset}"
+                )
                 break
             got_cards = True
 
@@ -156,7 +165,7 @@ while game.game_over == False:
             suit = selected_cards[-1].suit
             new_or_existing = input("\nNew set or add to existing set? (n/e): ")
             if new_or_existing != "n" and new_or_existing != "e":
-                print("\nInvalid input. Try again.")
+                print(f"\n{error}Invalid input. Try again.{reset}")
                 continue
             if new_or_existing == "n":
                 current_player.drop_set(selected_cards, suit, game)
@@ -166,9 +175,8 @@ while game.game_over == False:
                 )
                 if index_of_set.isdigit() == False:
                     continue
-                extended = current_player.can_extend_set(
-                    selected_cards, index_of_set, game
-                )
+                s = team_set[suit][int(index_of_set)]
+                extended = current_player.can_extend_set(selected_cards, s, game)
                 if extended == False:
                     continue
         else:
@@ -180,7 +188,7 @@ while game.game_over == False:
             # // single card to existing set?
             card = selected_cards[0]
             if team_set.get(card.suit) == None:
-                print("No sets of that suit to add. Try again.")
+                print(f"{error}No sets of that suit to add. Try again.{reset}")
                 continue
 
             index_of_set = input(
@@ -219,11 +227,11 @@ while game.game_over == False:
                 or int(card_to_trash) > len(current_player.hand)
                 or card_to_trash.isdigit() == False
             ):
-                print("Invalid choice. Try again.")
+                print(f"{error}Invalid choice. Try again.{reset}")
                 continue
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
-                f"are you sure you want to discard {card_to_trash}? (y/n)"
+                f"{Fore.GREEN}are you sure you want to discard {card_to_trash}? (y/n){reset}"
             )
             if confirmation != "y":
                 continue
@@ -257,8 +265,8 @@ while game.game_over == False:
 num_of_team1_cards_in_hand = len(game.players[0].hand) + len(game.players[2].hand)
 num_of_team2_cards_in_hand = len(game.players[1].hand) + len(game.players[3].hand)
 
-print(f"\nTeam1 has to discard: {num_of_team1_cards_in_hand} cards")
-print(f"\nTeam2 has to discard: {num_of_team2_cards_in_hand} cards")
+print(f"\n{Fore.YELLOW}Team1 has to discard: {num_of_team1_cards_in_hand} cards")
+print(f"\n{Fore.BLUE}Team2 has to discard: {num_of_team2_cards_in_hand} cards")
 
 # * Team choses which cards to remove from sets if any
 for player in game.players:
@@ -266,6 +274,7 @@ for player in game.players:
 
 all_players_removed = False
 while all_players_removed == False:
+    color = Fore.YELLOW if player._get_team(game) == "1" else Fore.BLUE
     i = 0
     cur_player = game.players[i]
     while cur_player.played == False or i < len(game.players) - 1:
@@ -274,11 +283,11 @@ while all_players_removed == False:
             i += 1
             continue
         # ! again Validation of inputs (suit, index, n)
-        print(f"\n\nTeam {player._get_team(game)} sets:\n {game.team1_sets}")
+        print(f"\n\n{color}Team {player._get_team(game)} sets:\n {game.team1_sets}")
         print(f"\n{cur_player.name} needs to remove {len(cur_player.hand)} cards.")
         suit_to_remove = input(f"\n{cur_player.name} which suit to remove? (c,d,h,s): ")
         if suit_to_remove not in ["c", "d", "h", "s"]:
-            print("No suit selected. Try again.")
+            print(f"{error}No suit selected. Try again.{reset}")
             break
         suit_to_remove = cur_player.get_suit(suit_to_remove)
         index_of_set = input(
@@ -287,7 +296,7 @@ while all_players_removed == False:
         if index_of_set.isdigit() == False or int(index_of_set) > len(
             game.team1_sets[suit_to_remove] - 1
         ):
-            print("Invalid input, must be a valid number. Try again.")
+            print(f"{error}Invalid input, must be a valid number. Try again.{reset}")
             break
 
         n = input(f"\nHow many cards to remove from this set?): ")
@@ -296,7 +305,9 @@ while all_players_removed == False:
             or n > len(game.team1_sets[suit_to_remove] - 1)
             or n > len(cur_player.hand)
         ):
-            print("must be a number up to the cards in your hand or set. Try again.")
+            print(
+                f"{color}must be a number up to the cards in your hand or set. Try again.{reset}"
+            )
             break
 
         # ! remove cards from set and hand
@@ -331,8 +342,8 @@ for suit in game.team2_sets:
 team2_points += n_cards * 10
 
 if team1_points > team2_points:
-    print(f"\n\nTeam 1 wins with {team1_points} points!")
+    print(f"\n\n{Back.GREEN}Team 1 wins with {team1_points} points!")
 elif team2_points > team1_points:
-    print(f"\n\neam 2 wins with {team2_points} points!")
+    print(f"\n\n{Back.GREEN}eam 2 wins with {team2_points} points!")
 else:
     print(f"\n\nTeam 1 and Team 2 are tied with {team1_points} points!")
