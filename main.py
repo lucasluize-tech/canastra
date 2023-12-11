@@ -250,18 +250,85 @@ while game.game_over == False:
     else:
         current_player = player1
 
-# // after game is over sum the points and declare the winner
+# // ********************** GAME OVER *********************************
 
+# // First, for each card in team's hand remove from team's sets.
+
+num_of_team1_cards_in_hand = len(game.players[0].hand) + len(game.players[2].hand)
+num_of_team2_cards_in_hand = len(game.players[1].hand) + len(game.players[3].hand)
+
+print(f"\nTeam1 has to discard: {num_of_team1_cards_in_hand} cards")
+print(f"\nTeam2 has to discard: {num_of_team2_cards_in_hand} cards")
+
+# * Team choses which cards to remove from sets if any
+for player in game.players:
+    player.played = False
+
+all_players_removed = False
+while all_players_removed == False:
+    i = 0
+    cur_player = game.players[i]
+    while cur_player.played == False or i < len(game.players) - 1:
+        if len(cur_player.hand) < 1:
+            cur_player.played = True
+            i += 1
+            continue
+        # ! again Validation of inputs (suit, index, n)
+        print(f"\n\nTeam {player._get_team(game)} sets:\n {game.team1_sets}")
+        print(f"\n{cur_player.name} needs to remove {len(cur_player.hand)} cards.")
+        suit_to_remove = input(f"\n{cur_player.name} which suit to remove? (c,d,h,s): ")
+        if suit_to_remove not in ["c", "d", "h", "s"]:
+            print("No suit selected. Try again.")
+            break
+        suit_to_remove = cur_player.get_suit(suit_to_remove)
+        index_of_set = input(
+            f"\nWhich set? from 0 to {len(game.team1_sets[suit_to_remove])-1}: "
+        )
+        if index_of_set.isdigit() == False or int(index_of_set) > len(
+            game.team1_sets[suit_to_remove] - 1
+        ):
+            print("Invalid input, must be a valid number. Try again.")
+            break
+
+        n = input(f"\nHow many cards to remove from this set?): ")
+        if (
+            n.isdigit() == False
+            or n > len(game.team1_sets[suit_to_remove] - 1)
+            or n > len(cur_player.hand)
+        ):
+            print("must be a number up to the cards in your hand or set. Try again.")
+            break
+
+        # ! remove cards from set and hand
+        cur_player.remove_from_set(n, suit_to_remove, index_of_set, game)
+        if len(cur_player.hand) < 1:
+            cur_player.played = True
+            i += 1
+            break
+        else:
+            # ! keep removing cards from hand until all cards are removed
+            continue
+    all_players_removed = True
+
+# // Second, let's sum up the points for each team
 team1_points = 0
 team2_points = 0
 
+n_cards = 0
 for suit in game.team1_sets:
     for s in game.team1_sets[suit]:
-        team1_points += s._get_points()
+        team1_points += points_from_set(s)
+        n_cards += len(s)
 
+team1_points += n_cards * 10
+
+n_cards = 0
 for suit in game.team2_sets:
     for s in game.team2_sets[suit]:
-        team2_points += s._get_points()
+        team2_points += points_from_set(s)
+        n_cards += len(s)
+
+team2_points += n_cards * 10
 
 if team1_points > team2_points:
     print(f"\n\nTeam 1 wins with {team1_points} points!")
