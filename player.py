@@ -52,15 +52,13 @@ class Player:
             print("\nCards do not extend the chosen set.")
             return False
 
-    def get_rank_and_suit(self, card):
-        if card is None:
-            raise ValueError("No cards selected.")
-        rank, suit = card.split(",")[0], card.split(",")[1].lower()
+    def get_suit(self, suit):
+        if suit is None:
+            raise ValueError("No suit selected.")
+
         suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
         suit = suits[suit]
-        new_card = self.get_card(rank, suit)
-
-        return new_card
+        return suit
 
     def get_card(self, index):
         self.hand = sorted(self.hand)
@@ -143,3 +141,8 @@ class Player:
                 return True
             print(f" {self.name} needs got a new hand.")
             return False
+
+    def remove_from_set(self, n, suit, index, game):
+        team_set = game._get_team_set(self)[suit][index]
+        for i in range(n):
+            team_set.remove(team_set[i])
