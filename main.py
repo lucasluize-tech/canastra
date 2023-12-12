@@ -20,6 +20,9 @@ from colored import Fore, Back, Style
   all of the above are default values, but can be changed by the user.
   
 """
+# ? styling
+error, reset = f"{Fore.WHITE}{Back.dark_red_1}", f"{Style.RESET}"
+action = f"{Back.grey_19}{Style.bold}"
 
 # ? default values: (4, 4, 4) -> 4 players, 4 new_hands, 4 decks
 NUMBER_OF_PLAYERS = 4
@@ -41,24 +44,13 @@ players = [Player(names[i], new_hands[i]) for i in range(NUMBER_OF_PLAYERS)]
 game = Table(players, deck, new_hands[NUMBER_OF_PLAYERS:])
 # print(f"\nThis is the game state:\n{game}\n")
 
-player1, player2, player3, player4 = (
-    game.players[0],
-    game.players[1],
-    game.players[2],
-    game.players[3],
-)
+i = 0  # // player index
 
 # // Start game state loop:
 
-current_player = player1
-error, reset = f"{Fore.WHITE}{Back.dark_red_1}", f"{Style.RESET}"
-action = f"{Back.grey_19}{Style.bold}"
 while game.game_over == False:
-    color = (
-        Fore.YELLOW
-        if current_player is player1 or current_player is player3
-        else Fore.BLUE
-    )
+    current_player = game.players[i]
+    color = Fore.YELLOW if i % 2 == 0 else Fore.BLUE
     current_player.played = False
     print(f"{color}************************   Table   **********************: \n", "\n")
     print(
@@ -250,14 +242,10 @@ while game.game_over == False:
         break
 
     # // next player
-    if current_player is player1:
-        current_player = player2
-    elif current_player is player2:
-        current_player = player3
-    elif current_player is player3:
-        current_player = player4
+    if i < len(game.players) - 1:
+        i += 1
     else:
-        current_player = player1
+        i = 0
 
 # // ********************** GAME OVER *********************************
 

@@ -1,6 +1,9 @@
 # Canastra Game
 
 This is a Python backend implementation of the card game Canasta.
+it is part of my Personal projects to learn Python and it took me about 2 weeks to complete, 3 hours a day, so roughly 40 hours of work.
+
+**Big Thanks**👏 to [Boot.dev](https://boot.dev) for making learning fun.
 
 ## Setup
 
@@ -73,9 +76,12 @@ some of the changes is that we don't use the jokers, we don't use the 'freeze' r
 
 ## Features
 
-- Team-based gameplay: Play with a friend against two AI opponents.
-- Automatic scoring: The game automatically calculates scores based on the cards in each team's sets.
-- Color-coded output: The game's output is color-coded to make it easier to understand what's happening.
+- Multiplayer: The game supports a even probably infinite number of players and decks, you can edit at `main.py` file.
+- Calculate scoring: The game automatically calculates scores based on the cards in each team's sets.
+- Color-coded output: The game's output is color-coded to make it easier to understand what's happening **on the backend**
+- deck generation: The game automatically generates a deck of cards, distributes hands, and separates the new hands for each team.
+- set validation: The game automatically detects sets in the table and in the player's hand.
+- 'chin' validation: The game automatically detects when a player 'chins' and ends the game.
 
 ## Contributing
 
