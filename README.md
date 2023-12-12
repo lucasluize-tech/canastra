@@ -1,4 +1,4 @@
-# Canasta Game
+# Canastra Game
 
 This is a Python backend implementation of the card game Canasta.
 
