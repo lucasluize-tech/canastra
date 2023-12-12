@@ -3,7 +3,7 @@ from deck import Deck
 from table import Table
 from colored import Fore, Back, Style
 
-# ! time spent: 20 hours so far
+# ! time spent: 25 hours so far
 
 """
 
@@ -52,7 +52,7 @@ player1, player2, player3, player4 = (
 
 current_player = player1
 error, reset = f"{Fore.WHITE}{Back.dark_red_1}", f"{Style.RESET}"
-action = f"{Back.GRAY}"
+action = f"{Back.grey_19}{Style.bold}"
 while game.game_over == False:
     color = (
         Fore.YELLOW
@@ -82,8 +82,8 @@ while game.game_over == False:
         current_player.get_trash(game.trash)
         game.trash = []
     current_player.hand = sorted(current_player.hand)
-    print(f"\nHand: {current_player.hand}\n")
-    print(f"hand: {[i for i in range(1,len(current_player.hand)+ 1)]}")
+    print(f"\n{color}Hand: {current_player.hand}\n")
+    print(f"hand range: 1 to {len(current_player.hand)}")
 
     # // SECOND MOVE: player play cards or move to discard
     while current_player.played == False:
@@ -107,7 +107,7 @@ while game.game_over == False:
 
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
-                f"{Fore.GREEN}are you sure you want to discard {card_to_trash} (y/n)?: {reset}"
+                f"{Fore.GREEN}{Style.bold}are you sure you want to discard {card_to_trash} (y/n)?: {reset}"
             )
             if confirmation == "n" and confirmation != "y":
                 print(f"\n{error}Invalid input. Try again.{reset}")
@@ -134,7 +134,7 @@ while game.game_over == False:
             continue
 
         # ! grab cards from hand unsing indexes
-        print(f"number in hand of selected cards : {selected_cards}")
+
         got_cards = False
         for i in range(1, len(selected_cards) + 1):
             try:
@@ -187,12 +187,13 @@ while game.game_over == False:
 
             # // single card to existing set?
             card = selected_cards[0]
-            if team_set.get(card.suit) == None:
+            suit = card.suit
+            if team_set.get(suit) == None:
                 print(f"{error}No sets of that suit to add. Try again.{reset}")
                 continue
 
             index_of_set = input(
-                f"\nWhich set? (first = 0) or enter to cancel :\n ${team_set[suit]} "
+                f"\nWhich set? (first = 0) or enter to cancel :\n ${team_set[suit]}"
             )
             if index_of_set.isdigit() == False:
                 continue
@@ -231,7 +232,7 @@ while game.game_over == False:
                 continue
             card_to_trash = current_player.get_card(card_to_trash)
             confirmation = input(
-                f"{Fore.GREEN}are you sure you want to discard {card_to_trash}? (y/n){reset}"
+                f"{Fore.GREEN}{Style.bold}are you sure you want to discard {card_to_trash}? (y/n){reset}"
             )
             if confirmation != "y":
                 continue

@@ -1,6 +1,7 @@
 from deck import Deck, Card
 from player import Player
 import random
+from colored import Fore, Style
 
 
 class Table:
@@ -70,4 +71,4 @@ class Table:
         return True
 
     def table(self, current_player):
-        return f"Sets:\n\nTeam1: {self.team1_sets}\n\nTeam2: {self.team2_sets}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n{current_player.name}'s hand: {sorted(current_player.hand)}\n\n"
+        return f"Sets:\n\nTeam1: {Fore.YELLOW}{self.team1_sets}{Style.RESET}\n\n{Fore.BLUE}Team2: {self.team2_sets}{Style.RESET}\n\nTrash: {self.trash}\n\n# Cards in Deck: {len(self.deck.cards)}\n\nNew Hands: {len(self.new_hands)}\n\n{Fore.YELLOW}{current_player.name}'s hand: {sorted(current_player.hand)}\n\n{Style.RESET}"

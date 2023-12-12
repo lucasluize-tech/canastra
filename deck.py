@@ -1,13 +1,19 @@
 import random
 
 
+hearts = "♥"
+diamonds = "♦"
+clubs = "♣"
+spades = "♠"
+
+
 class Deck:
     def __init__(self, n=1):
         self.cards = []
         self._add_all_cards(n)
 
     def _add_all_cards(self, n):
-        suits = ["Clubs", "Diamonds", "Hearts", "Spades"]
+        suits = [clubs, diamonds, hearts, spades]
         i = n
         while i > 0:
             for suit in suits:
@@ -63,7 +69,7 @@ class Card:
         "Queen": 12,
         "King": 13,
     }
-    suit_order = {"Clubs": 1, "Diamonds": 2, "Hearts": 3, "Spades": 4}
+    suit_order = {clubs: 1, diamonds: 2, hearts: 3, spades: 4}
 
     def __init__(self, suit, rank):
         self.suit = suit

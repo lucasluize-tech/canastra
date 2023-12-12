@@ -1,5 +1,11 @@
 from deck import Card
 from helpers import is_in_order, extends_set
+from colored import Fore, Style
+
+hearts = "♥"
+diamonds = "♦"
+clubs = "♣"
+spades = "♠"
 
 
 class Player:
@@ -34,10 +40,10 @@ class Player:
         card_list = sorted(card_list)
         if team_set.get(suit) is None:
             team_set[suit] = [(card_list)]
-            print(f"team set now is : {team_set}")
+            print(f"team set now is : {Style.bold}{team_set}{Style.RESET}")
         else:
             team_set[suit].append(card_list)
-            print(f"team set now is : {team_set}")
+            print(f"team set now is : {Style.bold}{team_set}{Style.RESET}")
         for card in card_list:
             self.hand.remove(card)
 
@@ -55,7 +61,7 @@ class Player:
         if suit is None:
             raise ValueError("No suit selected.")
 
-        suits = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
+        suits = {"c": clubs, "d": diamonds, "h": hearts, "s": spades}
         suit = suits[suit]
         return suit
 
