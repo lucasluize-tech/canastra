@@ -24,18 +24,87 @@ from colored import Fore, Back, Style
 error, reset = f"{Fore.WHITE}{Back.dark_red_1}", f"{Style.RESET}"
 action = f"{Back.grey_19}{Style.bold}"
 
-# ? default values: (4, 4, 4) -> 4 players, 4 new_hands, 4 decks
-NUMBER_OF_PLAYERS = 4
-NUMBER_OF_NEW_HANDS = 4
-NUMBER_OF_DECKS = 4
+# ? Defaults match the "classic family game": 4 players, 2 decks, 2 reserves/team.
+DEFAULT_PLAYERS = 4
+DEFAULT_DECKS = 2
+DEFAULT_RESERVES_PER_TEAM = 2
+
+
+def ask_int(prompt: str, default: int, validate) -> int:
+    """Prompt for an int until `validate(n)` returns None (ok) or an error string."""
+    while True:
+        raw = input(f"{action}{prompt} [default {default}]: {reset}").strip()
+        if raw == "":
+            return default
+        if not raw.lstrip("-").isdigit():
+            print(f"{error}  '{raw}' is not a number.{reset}")
+            continue
+        n = int(raw)
+        err = validate(n)
+        if err is None:
+            return n
+        print(f"{error}  {err}{reset}")
+
+
+def _validate_players(n: int) -> str | None:
+    if n < 4:
+        return "Need at least 4 players (2 teams of 2)."
+    if n % 2 != 0:
+        return "Number of players must be even (two balanced teams)."
+    return None
+
+
+def _validate_decks(n: int) -> str | None:
+    if n < 2:
+        return "Need at least 2 decks."
+    if n % 2 != 0:
+        return "Number of decks must be even."
+    return None
+
+
+def _make_reserve_validator(num_decks: int):
+    def _validate(n: int) -> str | None:
+        if n < 2:
+            return "Need at least 2 reserve hands per team."
+        if n > num_decks:
+            return f"Reserve hands per team cannot exceed number of decks ({num_decks})."
+        return None
+
+    return _validate
+
+
+print(f"{action} Canastra — game setup {reset}\n")
+NUMBER_OF_PLAYERS = ask_int("Number of players (even, >= 4)", DEFAULT_PLAYERS, _validate_players)
+NUMBER_OF_DECKS = ask_int("Number of decks (even, >= 2)", DEFAULT_DECKS, _validate_decks)
+RESERVES_PER_TEAM = ask_int(
+    "Reserve hands per team (2 <= x <= decks)",
+    min(DEFAULT_RESERVES_PER_TEAM, NUMBER_OF_DECKS),
+    _make_reserve_validator(NUMBER_OF_DECKS),
+)
+
+# Sanity check: each player and each reserve pile takes 11 cards; warn if the
+# remaining draw deck will be thin (can make for an extremely short game).
+_total_piles = NUMBER_OF_PLAYERS + 2 * RESERVES_PER_TEAM
+_cards_dealt = 11 * _total_piles
+_deck_after_deal = 52 * NUMBER_OF_DECKS - _cards_dealt
+if _deck_after_deal < 0:
+    raise SystemExit(
+        f"{error}  {NUMBER_OF_DECKS} decks give only {52 * NUMBER_OF_DECKS} cards, "
+        f"but this setup needs {_cards_dealt} (each player + each reserve = 11 cards).{reset}"
+    )
+if _deck_after_deal < 20:
+    print(
+        f"{error}  Heads up: only {_deck_after_deal} cards left in the draw deck "
+        f"after the deal — the game may end very quickly.{reset}"
+    )
 
 deck = Deck(NUMBER_OF_DECKS)
 deck._shuffle()
 
-# // we need double the number of new_hands 1ea/player + 1ea/morto
-new_hands = [hand for hand in deck._deal_new_hands(NUMBER_OF_DECKS + NUMBER_OF_PLAYERS)]
+# One pile per player + `RESERVES_PER_TEAM` piles per team (shared reserve pool).
+new_hands = deck._deal_new_hands(_total_piles)
 
-names = [(input(f"Player {i+1} name: ")) for i in range(NUMBER_OF_PLAYERS)]
+names = [(input(f"{action}Player {i+1} name: {reset}")) for i in range(NUMBER_OF_PLAYERS)]
 
 # // create players
 players = [Player(names[i], new_hands[i]) for i in range(NUMBER_OF_PLAYERS)]
