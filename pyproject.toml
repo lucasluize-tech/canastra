@@ -1,0 +1,141 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canastra"
+version = "0.1.0"
+description = "Terminal-based Python implementation of Canastra (family variant)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "lucasluize-tech" }]
+dependencies = [
+    "colored==2.2.3",
+]
+
+[project.optional-dependencies]
+# Mirrored in requirements-dev.txt for pip users. Keep them in sync.
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pre-commit>=3.7",
+]
+
+# ---------------------------------------------------------------------------
+# setuptools: Phase 1 ships the `canastra` package (pure domain). The flat
+# files (deck.py, player.py, table.py, helpers.py, main.py) remain at the
+# repo root as thin re-export shims + the CLI entry. They'll be deleted in
+# Phase 3 when main.py becomes a CLI adapter inside the package.
+# ---------------------------------------------------------------------------
+[tool.setuptools]
+py-modules = ["deck", "player", "table", "helpers", "main"]
+packages = ["canastra", "canastra.domain"]
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format. Replaces black + isort + flake8.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["venv", ".venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+# Sensible default set: pycodestyle, pyflakes, isort, bugbear, pyupgrade,
+# simplify, comprehensions. Keep the list short so findings stay actionable.
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "W"]
+ignore = [
+    "E501",  # line length is enforced by the formatter, not the linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Pytest: standard layout post Phase 0. Tests live under tests/.
+# --import-mode=importlib is kept — it's the modern recommended default.
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+# --cov=. covers the flat layout today. Flip to --cov=canastra after Phase 1.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--import-mode=importlib",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+# Don't let pytest wander into the venv or build dirs looking for tests.
+norecursedirs = ["venv", ".venv", "build", "dist", "__pycache__", ".git"]
+# Filter noisy prints from the legacy tests; keep warnings visible.
+filterwarnings = ["default"]
+
+# ---------------------------------------------------------------------------
+# Coverage: branch coverage on. fail_under starts at 0 (permissive) and will
+# be ratcheted up each refactor phase. Suggested ladder:
+#   Phase 0: 0    (baseline)
+#   Phase 1: 60   (domain package extracted, property tests land)
+#   Phase 2: 75   (engine state machine + scenario tests)
+#   Phase 3: 80   (CLI adapter thin, engine well-covered)
+#   Phase 4+: 85  (FastAPI handlers excluded via pragma where appropriate)
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = [
+    "venv/*",
+    ".venv/*",
+    "tests/*",
+    "conftest.py",
+    "main.py",  # interactive loop; covered by CLI/integration tests later
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# ---------------------------------------------------------------------------
+# mypy: lenient by default today (the codebase is untyped). Strict once
+# canastra.domain exists (Phase 1). Add more strict overrides as packages
+# land.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+# Lenient defaults for the current flat layout.
+check_untyped_defs = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+[[tool.mypy.overrides]]
+# Strict mode kicks in once the pure domain package exists. Safe to leave
+# this block here now; mypy just won't find matching files until Phase 1.
+module = ["canastra.domain.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_return_any = true
+no_implicit_optional = true
+strict_equality = true

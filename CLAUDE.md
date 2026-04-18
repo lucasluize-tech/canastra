@@ -9,13 +9,16 @@ Terminal-based Python implementation of Canastra (the author's family variant �
 ## Commands
 
 ```bash
-pip install -r requirements.txt    # only dep: colored==2.2.3
-python main.py                     # run the game (prompts for player names)
-python test.deck.py                # deck/table unit tests
-python test.helpers.py             # rule-logic unit tests (is_in_order, is_clean, extends_set, points_for_set)
+source venv/bin/activate
+uv pip install -r requirements.txt -r requirements-dev.txt   # runtime + dev deps
+python main.py                                               # run the game (prompts for player names)
+pytest                                                       # full suite + coverage (config in pyproject.toml)
+pytest tests/test_helpers.py                                 # single file
+pytest tests/test_helpers.py::TestHelpers::test_is_clean     # single test
+make ci                                                      # lint + typecheck + test locally
 ```
 
-Test files use dots in their names (`test.deck.py`, not `test_deck.py`), so `python -m unittest discover` and pytest auto-discovery will not pick them up — invoke each file directly. To run a single test: `python test.helpers.py TestHelpers.test_is_clean`.
+Tests live under `tests/` as of Phase 0 of the refactor. `conftest.py` at the repo root inserts the root on `sys.path` so tests can still `from deck import ...` against the flat-layout modules; delete it once Phase 1 ships `canastra/` as a proper package.
 
 ## Architecture
 
@@ -30,7 +33,7 @@ Four modules plus a top-level game loop. Data flows one way: `main.py` drives in
 ## Conventions and gotchas
 
 - Teams are assigned by index parity in `Table.__init__` — reordering `players` changes team composition. `main.py` also uses `i % 2` for the turn-color heuristic, which assumes that ordering.
-- Suits are unicode glyphs (`♥ ♦ ♣ ♠`) defined at the top of `deck.py`, `player.py`, and `test.helpers.py`. Keep them consistent if adding files.
+- Suits are unicode glyphs (`♥ ♦ ♣ ♠`) defined at the top of `deck.py`, `player.py`, and `tests/test_helpers.py`. Keep them consistent if adding files.
 - `Card.__eq__` compares by `(suit, rank)` only, so duplicates across decks compare equal — `hand.remove(card)` removes the first match, which is the intended behavior for multi-deck play.
 - Rank `2` is a wildcard everywhere except when it appears in the "twos" slot of a natural run. Touch `is_in_order` / `is_clean` / `extends_set` together when changing wildcard semantics — the test suite covers the tricky Ace-high/Ace-low and joker-in-middle cases.
 - `README.md` lists the roadmap (API + frontend). Current code is strictly terminal/backend; there is no web layer yet.
