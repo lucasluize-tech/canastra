@@ -129,6 +129,10 @@ class TestHelpers(unittest.TestCase):
         print(f"tested OK : clean with 2: 2,3,5,6\n")
 
         # Test with a sequence containing 3,5,2,7,8
+        # Canonical rule (Phase 2): ranks 3,5,7,8 span slots 3..8 (length 6)
+        # but the set is only length 5 with a single wild; two gaps (4 and 6)
+        # cannot be filled by one wild, so this is NOT a valid run.
+        # The pre-Phase-2 helper returned True here by accident.
         cards = [
             Card(hearts, 3),
             Card(hearts, 5),
@@ -137,8 +141,8 @@ class TestHelpers(unittest.TestCase):
             Card(hearts, 8),
         ]
         sorted_cards = sorted(cards)
-        self.assertTrue(is_in_order(sorted_cards))
-        print(f"tested OK : not clean order with 2: 3,5,2,7,8\n")
+        self.assertFalse(is_in_order(sorted_cards))
+        print(f"tested OK : 3,5,2,7,8 rejected (two gaps, one wild)\n")
 
     def test_is_clean(self):
         print(f"{color}****  start of is_clean tests ****\n{reset}")
@@ -203,6 +207,12 @@ class TestHelpers(unittest.TestCase):
         self.assertTrue(extends_set(chosen_set, card_list))
         print(f"tested OK : 5 extends_set 2,3,4\n")
 
+        # Canonical rule (Phase 2): the combined set [2♥,2♥,3♥,4♥,5♥,6♥]
+        # has 2 rank-2 cards (within the per-set cap) and forms a valid
+        # run [2..7] with one 2♥ as natural at slot 2 and the other as a
+        # wild filling slot 7 — so the extension is accepted. The
+        # pre-Phase-2 helper rejected any wild matching the set's suit,
+        # which is not a canonical rule.
         chosen_set = [
             Card(rank=2, suit=hearts),
             Card(rank=3, suit=hearts),
@@ -213,8 +223,8 @@ class TestHelpers(unittest.TestCase):
             Card(rank=5, suit=hearts),
             Card(rank=6, suit=hearts),
         ]
-        self.assertFalse(extends_set(chosen_set, card_list))
-        print(f"test OK : 2 jokers same suit\n")
+        self.assertTrue(extends_set(chosen_set, card_list))
+        print(f"test OK : 2 wilds same suit allowed (canonical)\n")
 
         chosen_set = [
             Card(rank=2, suit=hearts),

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from canastra.domain.cards import HEARTS, Card
 from canastra.domain.scoring import points_for_set, points_from_set
 
@@ -13,14 +11,6 @@ def _run(ranks: list[object]) -> list[Card]:
 
 
 class TestPointsForSet:
-    @pytest.mark.xfail(
-        reason=(
-            "Phase 2: scoring checks s[0] and s[1] without sorting — misses the "
-            "A-low+A-high case when the list is not pre-sorted. Fix in Phase 2 by "
-            "detecting 'contains two Aces and len==14' instead of positional checks."
-        ),
-        strict=True,
-    )
     def test_ace_low_plus_ace_high_1000(self) -> None:
         ranks: list[object] = [
             "Ace",
