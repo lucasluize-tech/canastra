@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from canastra.domain.cards import Card, HEARTS
-from canastra.engine.state import GameConfig, Meld
+from canastra.engine.state import GameConfig, Meld, GameState, Phase, TurnState
 
 
 def test_config_defaults_for_4p2d():
@@ -65,3 +65,52 @@ def test_meld_two_instances_have_distinct_ids():
 def test_meld_serialization_round_trip():
     m = Meld(cards=[_h(3), _h(4), _h(5)], permanent_dirty=True)
     assert Meld.model_validate_json(m.model_dump_json()) == m
+
+
+def _config_4p2d():
+    return GameConfig(num_players=4, num_decks=2, reserves_per_team=2, timer_enabled=False, seed=1)
+
+
+def test_phase_values():
+    assert {p.value for p in Phase} == {"waiting_draw", "playing", "discarding", "ended"}
+
+
+def test_gamestate_minimal_construction():
+    cfg = _config_4p2d()
+    s = GameState(
+        config=cfg,
+        seat_order=[0, 1, 2, 3],
+        teams={0: [0, 2], 1: [1, 3]},
+        hands={0: [], 1: [], 2: [], 3: []},
+        melds={0: [], 1: []},
+        reserves={0: [], 1: []},
+        reserves_used={0: 0, 1: 0},
+        deck=[],
+        trash=[],
+        current_turn=TurnState(player_id=0, phase=Phase.WAITING_DRAW),
+        phase=Phase.WAITING_DRAW,
+        action_seq=0,
+    )
+    assert s.current_turn.player_id == 0
+    assert s.phase is Phase.WAITING_DRAW
+
+
+def test_gamestate_serialization_round_trip():
+    cfg = _config_4p2d()
+    s = GameState(
+        config=cfg,
+        seat_order=[0, 1, 2, 3],
+        teams={0: [0, 2], 1: [1, 3]},
+        hands={0: [_h(3)], 1: [], 2: [], 3: []},
+        melds={0: [], 1: []},
+        reserves={0: [], 1: []},
+        reserves_used={0: 0, 1: 0},
+        deck=[_h(4)],
+        trash=[_h(5)],
+        current_turn=TurnState(player_id=0, phase=Phase.WAITING_DRAW),
+        phase=Phase.WAITING_DRAW,
+        action_seq=0,
+    )
+    blob = s.model_dump_json()
+    s2 = GameState.model_validate_json(blob)
+    assert s2 == s

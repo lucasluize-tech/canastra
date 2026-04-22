@@ -8,6 +8,7 @@ it (no accidental in-place mutation).
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -69,3 +70,80 @@ class Meld(BaseModel):
     @field_serializer("cards")
     def _serialize_cards(self, cards: list[Card]) -> list[dict[str, Any]]:
         return [_card_to_dict(c) for c in cards]
+
+
+PlayerId = int
+TeamId = int
+
+
+class Phase(str, Enum):
+    WAITING_DRAW = "waiting_draw"
+    PLAYING = "playing"
+    DISCARDING = "discarding"
+    ENDED = "ended"
+
+
+class TurnState(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    player_id: PlayerId
+    phase: Phase
+    deadline_at: float | None = None  # unix epoch seconds; None = no timer
+
+
+def _cards_before(v: Any) -> list[Card]:
+    return [_card_from_dict(x) for x in v]
+
+
+def _cards_after(cards: list[Card]) -> list[dict[str, Any]]:
+    return [_card_to_dict(c) for c in cards]
+
+
+class GameState(BaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    config: GameConfig
+    seat_order: list[PlayerId]
+    teams: dict[TeamId, list[PlayerId]]
+    hands: dict[PlayerId, list[Card]]
+    melds: dict[TeamId, list[Meld]]
+    reserves: dict[TeamId, list[list[Card]]]  # stack of reserve hands per team
+    reserves_used: dict[TeamId, int]
+    deck: list[Card]
+    trash: list[Card]
+    current_turn: TurnState
+    phase: Phase
+    action_seq: int = 0
+    winning_team: TeamId | None = None
+    chin_team: TeamId | None = None
+
+    @field_validator("hands", "deck", "trash", mode="before")
+    @classmethod
+    def _parse_card_lists(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            return {int(k): _cards_before(vv) for k, vv in v.items()}
+        return _cards_before(v)
+
+    @field_validator("reserves", mode="before")
+    @classmethod
+    def _parse_reserves(cls, v: Any) -> Any:
+        return {int(k): [_cards_before(h) for h in stacks] for k, stacks in v.items()}
+
+    @field_validator("teams", "reserves_used", mode="before")
+    @classmethod
+    def _parse_int_keys(cls, v: Any) -> Any:
+        return {int(k): vv for k, vv in v.items()}
+
+    @field_serializer("hands")
+    def _ser_hands(self, hands: dict[PlayerId, list[Card]]) -> dict[str, list[dict[str, Any]]]:
+        return {str(k): _cards_after(v) for k, v in hands.items()}
+
+    @field_serializer("deck", "trash")
+    def _ser_card_list(self, cards: list[Card]) -> list[dict[str, Any]]:
+        return _cards_after(cards)
+
+    @field_serializer("reserves")
+    def _ser_reserves(
+        self, reserves: dict[TeamId, list[list[Card]]]
+    ) -> dict[str, list[list[dict[str, Any]]]]:
+        return {str(k): [_cards_after(h) for h in stacks] for k, stacks in reserves.items()}
