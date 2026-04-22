@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from canastra.domain.cards import Card, HEARTS, SPADES
+from canastra.domain.cards import HEARTS, SPADES, Card
 from canastra.engine.actions import (
     Action,
     Chin,
@@ -187,3 +187,75 @@ def test_create_meld_wrong_phase(cfg_4p2d):
     s = initial_state(cfg_4p2d)
     with pytest.raises(ActionRejected, match="phase"):
         apply(s, CreateMeld(player_id=0, cards=[Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]))
+
+
+# ---------------------------------------------------------------------------
+# ExtendMeld tests
+# ---------------------------------------------------------------------------
+
+
+
+def test_extend_meld_valid(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    base = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+    s = _hand_with(s, 0, base + [Card(HEARTS, 6)])
+    s = _advance_to_playing(s)
+    s, _ = apply(s, CreateMeld(player_id=0, cards=base))
+    meld_id = s.melds[0][0].id
+
+    s1, events = apply(s, ExtendMeld(player_id=0, meld_id=meld_id, cards=[Card(HEARTS, 6)]))
+    assert s1.melds[0][0].cards[-1] == Card(HEARTS, 6)
+    assert len(s1.melds[0][0].cards) == 4
+    assert s1.hands[0].count(Card(HEARTS, 6)) == s.hands[0].count(Card(HEARTS, 6)) - 1
+    assert len(events) == 1
+    assert isinstance(events[0], MeldExtended)
+
+
+def test_extend_meld_rejects_break_run(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    base = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+    s = _hand_with(s, 0, base + [Card(HEARTS, 10)])
+    s = _advance_to_playing(s)
+    s, _ = apply(s, CreateMeld(player_id=0, cards=base))
+    meld_id = s.melds[0][0].id
+
+    with pytest.raises(ActionRejected, match="extend"):
+        apply(s, ExtendMeld(player_id=0, meld_id=meld_id, cards=[Card(HEARTS, 10)]))
+
+
+def test_extend_meld_unknown_id(cfg_4p2d):
+    from uuid import uuid4
+
+    s = initial_state(cfg_4p2d)
+    s = _hand_with(s, 0, [Card(HEARTS, 6)])
+    s = _advance_to_playing(s)
+    with pytest.raises(ActionRejected, match="meld"):
+        apply(s, ExtendMeld(player_id=0, meld_id=uuid4(), cards=[Card(HEARTS, 6)]))
+
+
+def test_extend_meld_cards_not_in_hand(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    base = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+    s = _hand_with(s, 0, base)
+    s = _advance_to_playing(s)
+    s, _ = apply(s, CreateMeld(player_id=0, cards=base))
+    meld_id = s.melds[0][0].id
+
+    s = s.model_copy(update={"hands": {**s.hands, 0: []}})
+    with pytest.raises(ActionRejected, match="hand"):
+        apply(s, ExtendMeld(player_id=0, meld_id=meld_id, cards=[Card(HEARTS, 6)]))
+
+
+def test_extend_meld_sets_permanent_dirty(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    # Base: [AceH, 2H, 3H] — valid clean 3-card run (Ace-low, natural-2, 3).
+    # Extend with off-suit 2S: combined [AceH, 2H, 3H, 2S] has matching-suit-2
+    # (2H) + another 2 (2S), triggering permanent_dirty via Condition 2.
+    base = [Card(HEARTS, "Ace"), Card(HEARTS, 2), Card(HEARTS, 3)]
+    s = _hand_with(s, 0, base + [Card(SPADES, 2)])
+    s = _advance_to_playing(s)
+    s, _ = apply(s, CreateMeld(player_id=0, cards=base))
+    meld_id = s.melds[0][0].id
+
+    s1, _ = apply(s, ExtendMeld(player_id=0, meld_id=meld_id, cards=[Card(SPADES, 2)]))
+    assert s1.melds[0][0].permanent_dirty is True

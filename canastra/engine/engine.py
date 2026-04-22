@@ -10,19 +10,19 @@ deterministic.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from canastra.domain.cards import Card
-from canastra.domain.rules import is_in_order, is_permanent_dirty
+from canastra.domain.rules import extends_set, is_in_order, is_permanent_dirty
 from canastra.engine.actions import (
     Action,
-    Chin,
     CreateMeld,
-    Discard,
     Draw,
     ExtendMeld,
     PickUpTrash,
 )
 from canastra.engine.errors import ActionRejected
-from canastra.engine.events import CardDrawn, Event, MeldCreated, TrashPickedUp
+from canastra.engine.events import CardDrawn, Event, MeldCreated, MeldExtended, TrashPickedUp
 from canastra.engine.state import GameState, Meld, Phase, TurnState
 
 
@@ -62,6 +62,13 @@ def _remove_cards_from_hand(hand: list[Card], cards: list[Card]) -> list[Card] |
         except ValueError:
             return None
     return remaining
+
+
+def _find_meld(state: GameState, team_id: int, meld_id: UUID) -> int | None:
+    for idx, m in enumerate(state.melds[team_id]):
+        if m.id == meld_id:
+            return idx
+    return None
 
 
 def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]]:
@@ -139,6 +146,43 @@ def _handle_create_meld(state: GameState, action: CreateMeld) -> tuple[GameState
     return new_state, [event]
 
 
+def _handle_extend_meld(state: GameState, action: ExtendMeld) -> tuple[GameState, list[Event]]:
+    _require_turn(state, action.player_id)
+    _require_phase(state, Phase.PLAYING)
+    team_id = _team_of(state, action.player_id)
+    idx = _find_meld(state, team_id, action.meld_id)
+    if idx is None:
+        raise ActionRejected(f"meld {action.meld_id} not found for team {team_id}")
+
+    meld = state.melds[team_id][idx]
+    if not extends_set(list(meld.cards), list(action.cards)):
+        raise ActionRejected("cards do not extend the meld into a valid run")
+
+    new_hand = _remove_cards_from_hand(state.hands[action.player_id], action.cards)
+    if new_hand is None:
+        raise ActionRejected("cards not in hand")
+
+    new_cards = list(meld.cards) + list(action.cards)
+    new_meld = Meld(
+        id=meld.id,
+        cards=new_cards,
+        permanent_dirty=meld.permanent_dirty or is_permanent_dirty(new_cards),
+    )
+    new_team_melds = list(state.melds[team_id])
+    new_team_melds[idx] = new_meld
+    new_melds = {**state.melds, team_id: new_team_melds}
+    new_hands = {**state.hands, action.player_id: new_hand}
+
+    new_state = _bump_seq(state, updates={"melds": new_melds, "hands": new_hands})
+    event = MeldExtended(
+        player_id=action.player_id,
+        team_id=team_id,
+        meld_id=meld.id,
+        added=list(action.cards),
+    )
+    return new_state, [event]
+
+
 def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
     if state.phase is Phase.ENDED:
         raise ActionRejected("game has ended")
@@ -151,6 +195,9 @@ def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
 
     if isinstance(action, CreateMeld):
         return _handle_create_meld(state, action)
+
+    if isinstance(action, ExtendMeld):
+        return _handle_extend_meld(state, action)
 
     # Other handlers land in later tasks.
     raise ActionRejected(f"action not implemented: {type(action).__name__}")
