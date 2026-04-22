@@ -57,3 +57,42 @@ def test_all_event_types_construct():
     ]
     for e in events:
         assert e.model_dump_json()
+
+
+import pytest
+
+from canastra.engine.engine import apply
+from canastra.engine.errors import ActionRejected
+from canastra.engine.setup import initial_state
+from canastra.engine.state import Phase
+
+
+def test_draw_in_waiting_draw_phase(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    assert len(s.hands[0]) == 11
+    top_card = s.deck[-1]
+
+    s1, events = apply(s, Draw(player_id=0))
+    assert len(s1.hands[0]) == 12
+    assert s1.hands[0][-1] == top_card
+    assert len(s1.deck) == len(s.deck) - 1
+    assert s1.phase is Phase.PLAYING
+    assert s1.current_turn.phase is Phase.PLAYING
+    assert s1.action_seq == s.action_seq + 1
+    assert len(events) == 1
+    assert isinstance(events[0], CardDrawn)
+    assert events[0].player_id == 0
+    assert events[0].card == top_card
+
+
+def test_draw_wrong_player_rejected(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    with pytest.raises(ActionRejected, match="not your turn"):
+        apply(s, Draw(player_id=1))
+
+
+def test_draw_wrong_phase_rejected(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    s1, _ = apply(s, Draw(player_id=0))
+    with pytest.raises(ActionRejected, match="phase"):
+        apply(s1, Draw(player_id=0))
