@@ -13,6 +13,7 @@ from canastra.domain.rules import (
     extends_set,
     is_clean,
     is_in_order,
+    is_permanent_dirty,
     rank_to_number,
 )
 from canastra.domain.scoring import points_for_set, points_from_set
@@ -25,6 +26,7 @@ __all__ = [
     "extends_set",
     "is_clean",
     "is_in_order",
+    "is_permanent_dirty",
     "points_for_set",
     "points_from_set",
     "rank_to_number",

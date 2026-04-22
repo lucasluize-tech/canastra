@@ -137,3 +137,73 @@ def extends_set(chosen_set: list[Card], card_list: list[Card]) -> bool:
     if sum(1 for c in combined if c.rank == WILD_RANK) > _MAX_WILDS:
         return False
     return _min_wild_count(combined) is not None
+
+
+def is_permanent_dirty(cards: list[Card]) -> bool:
+    """True iff the set is a valid run, not clean, and can never become clean.
+
+    Permanent-dirty conditions:
+      1. The set contains a natural-2 (matching suit, rank-2 slot) AND at
+         least one other rank-2 card (which must be a wild — a second natural-2
+         would be a duplicate rank and is already rejected by _min_wild_count).
+      2. An off-suit wild-2 occupies the rank-2 slot and every valid run
+         interpretation requires slot 2 (so the natural-2 can never displace it).
+
+    If the set is invalid or clean, returns False.
+    """
+    if _min_wild_count(cards) is None:
+        return False
+    if is_clean(cards):
+        return False
+
+    non_wild = [c for c in cards if c.rank != WILD_RANK]
+    if not non_wild:
+        return False
+    suit = non_wild[0].suit
+
+    twos = [c for c in cards if c.rank == WILD_RANK]
+    matching_suit_twos = [c for c in twos if c.suit == suit]
+    off_suit_twos = [c for c in twos if c.suit != suit]
+
+    # Condition 1: natural-2 + at least one wild-2 coexist — permanent-dirty
+    if matching_suit_twos and len(twos) >= 2:
+        return True
+
+    # Condition 2: only off-suit wilds present; check if slot 2 is unavoidable
+    if off_suit_twos and not matching_suit_twos:
+        ace_count = sum(1 for c in non_wild if c.rank == "Ace")
+        other_ranks = [rank_to_number(c.rank) for c in non_wild if c.rank != "Ace"]
+        fixed_slots = set(other_ranks)
+
+        if ace_count == 0:
+            ace_slot_options: list[set[int]] = [set()]
+        elif ace_count == 1:
+            ace_slot_options = [{1}, {14}]
+        else:
+            ace_slot_options = [{1, 14}]
+
+        length = len(cards)
+        any_interpretation_avoids_slot_2 = False
+
+        for ace_slots in ace_slot_options:
+            all_slots = fixed_slots | ace_slots
+            if not all_slots:
+                continue
+            lo, hi = min(all_slots), max(all_slots)
+            # Valid window: [start, start+length-1] must contain all fixed slots
+            start_min = max(1, hi - length + 1)
+            start_max = min(14 - length + 1, lo)
+            if start_min > start_max:
+                continue  # no valid window for this ace interpretation
+            # Does any valid window avoid slot 2?
+            # Window avoids slot 2 if start > 2 (window starts at rank 3+)
+            # AND slot 2 is not in all_slots (i.e. not a fixed non-wild card)
+            if start_max >= 3 and 2 not in all_slots:
+                any_interpretation_avoids_slot_2 = True
+                break
+
+        if any_interpretation_avoids_slot_2:
+            return False
+        return True
+
+    return False

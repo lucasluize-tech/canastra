@@ -9,7 +9,7 @@ to satisfy.
 from __future__ import annotations
 
 from canastra.domain.cards import CLUBS, HEARTS, SPADES, Card
-from canastra.domain.rules import extends_set, is_clean, is_in_order, rank_to_number
+from canastra.domain.rules import extends_set, is_clean, is_in_order, is_permanent_dirty, rank_to_number
 
 
 def _run(suit: str, ranks: list[object]) -> list[Card]:
@@ -143,3 +143,35 @@ class TestExtendsSet:
         ]
         addition = [Card(SPADES, 2)]  # third wild
         assert not extends_set(chosen, addition)
+
+
+class TestIsPermanentDirty:
+    def test_permanent_dirty_wrong_suit_two_in_rank_2_slot(self) -> None:
+        # 2 of SPADES occupies the heart run's rank-2 slot as a wild
+        cards = [Card(HEARTS, "Ace"), Card(SPADES, 2), Card(HEARTS, 3), Card(HEARTS, 4)]
+        assert is_permanent_dirty(cards) is True
+
+    def test_permanent_dirty_natural_plus_wild_both_present(self) -> None:
+        # 2 of HEARTS is the natural; 2 of SPADES is a wild elsewhere.
+        cards = [
+            Card(HEARTS, "Ace"),
+            Card(HEARTS, 2),
+            Card(HEARTS, 3),
+            Card(HEARTS, 4),
+            Card(SPADES, 2),
+            Card(HEARTS, 6),
+        ]
+        assert is_permanent_dirty(cards) is True
+
+    def test_dirty_but_not_permanent_wild_in_interior(self) -> None:
+        # Wild at slot 9 can later be displaced by a natural 9
+        cards = [Card(HEARTS, 7), Card(HEARTS, 8), Card(SPADES, 2), Card(HEARTS, 10)]
+        assert is_permanent_dirty(cards) is False
+
+    def test_clean_set_is_not_permanent_dirty(self) -> None:
+        cards = [Card(HEARTS, r) for r in (3, 4, 5, 6, 7, 8, 9)]
+        assert is_permanent_dirty(cards) is False
+
+    def test_invalid_set_is_not_permanent_dirty(self) -> None:
+        cards = [Card(HEARTS, 3), Card(SPADES, 4)]
+        assert is_permanent_dirty(cards) is False
