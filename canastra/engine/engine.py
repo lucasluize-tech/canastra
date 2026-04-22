@@ -17,12 +17,21 @@ from canastra.domain.rules import extends_set, is_in_order, is_permanent_dirty
 from canastra.engine.actions import (
     Action,
     CreateMeld,
+    Discard,
     Draw,
     ExtendMeld,
     PickUpTrash,
 )
 from canastra.engine.errors import ActionRejected
-from canastra.engine.events import CardDrawn, Event, MeldCreated, MeldExtended, TrashPickedUp
+from canastra.engine.events import (
+    CardDrawn,
+    Discarded,
+    Event,
+    MeldCreated,
+    MeldExtended,
+    TrashPickedUp,
+    TurnAdvanced,
+)
 from canastra.engine.state import GameState, Meld, Phase, TurnState
 
 
@@ -183,6 +192,40 @@ def _handle_extend_meld(state: GameState, action: ExtendMeld) -> tuple[GameState
     return new_state, [event]
 
 
+def _next_player(state: GameState) -> int:
+    current = state.current_turn.player_id
+    idx = state.seat_order.index(current)
+    return state.seat_order[(idx + 1) % len(state.seat_order)]
+
+
+def _handle_discard(state: GameState, action: Discard) -> tuple[GameState, list[Event]]:
+    _require_turn(state, action.player_id)
+    _require_phase(state, Phase.PLAYING)
+    new_hand = _remove_cards_from_hand(state.hands[action.player_id], [action.card])
+    if new_hand is None:
+        raise ActionRejected("card not in hand")
+
+    # NOTE: chin-on-discard and reserve-pickup are layered in later tasks.
+    new_hands = {**state.hands, action.player_id: new_hand}
+    next_pid = _next_player(state)
+    new_turn = TurnState(player_id=next_pid, phase=Phase.WAITING_DRAW)
+
+    new_state = _bump_seq(
+        state,
+        updates={
+            "hands": new_hands,
+            "trash": list(state.trash) + [action.card],
+            "current_turn": new_turn,
+            "phase": Phase.WAITING_DRAW,
+        },
+    )
+    events: list[Event] = [
+        Discarded(player_id=action.player_id, card=action.card),
+        TurnAdvanced(next_player_id=next_pid),
+    ]
+    return new_state, events
+
+
 def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
     if state.phase is Phase.ENDED:
         raise ActionRejected("game has ended")
@@ -198,6 +241,9 @@ def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
 
     if isinstance(action, ExtendMeld):
         return _handle_extend_meld(state, action)
+
+    if isinstance(action, Discard):
+        return _handle_discard(state, action)
 
     # Other handlers land in later tasks.
     raise ActionRejected(f"action not implemented: {type(action).__name__}")
