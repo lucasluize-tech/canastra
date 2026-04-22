@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "lucasluize-tech" }]
 dependencies = [
     "colored==2.2.3",
+    "pydantic>=2.6",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +34,7 @@ dev = [
 # ---------------------------------------------------------------------------
 [tool.setuptools]
 py-modules = ["deck", "player", "table", "helpers", "main"]
-packages = ["canastra", "canastra.domain"]
+packages = ["canastra", "canastra.domain", "canastra.engine"]
 
 # ---------------------------------------------------------------------------
 # Ruff: lint + format. Replaces black + isort + flake8.
