@@ -36,6 +36,7 @@ from canastra.engine.events import (
     TrashPickedUp,
     TurnAdvanced,
 )
+from canastra.engine.scoring import end_of_game_score
 from canastra.engine.state import GameState, Meld, Phase, TurnState
 
 
@@ -135,10 +136,20 @@ def _try_empty_hand_resolve(
     )
     if chin:
         events.append(Chinned(team_id=team_id))
-    # Scoring is computed here once the scoring module lands; for now emit
-    # a placeholder GameEnded with empty scores — overwritten by Task 15.
-    events.append(GameEnded(winning_team=None, scores={0: 0, 1: 0}))
+    game_ended_event = _emit_game_ended(ended)
+    ended = ended.model_copy(update={"winning_team": game_ended_event.winning_team})
+    events.append(game_ended_event)
     return ended, events
+
+
+def _emit_game_ended(state: GameState) -> GameEnded:
+    breakdowns = end_of_game_score(state)
+    scores = {tid: b.total for tid, b in breakdowns.items()}
+    if not scores:
+        return GameEnded(winning_team=None, scores=scores)
+    top = max(scores.values())
+    winner = None if list(scores.values()).count(top) > 1 else max(scores, key=lambda t: scores[t])
+    return GameEnded(winning_team=winner, scores=scores)
 
 
 def _replenish_deck(state: GameState) -> tuple[GameState, list[Event]]:
