@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from canastra.domain.cards import Card, HEARTS
+from canastra.domain.cards import Card, HEARTS, SPADES
 from canastra.engine.actions import (
     Action,
     Chin,
@@ -125,3 +125,65 @@ def test_pickup_trash_wrong_phase(cfg_4p2d):
     s1, _ = apply(s, PickUpTrash(player_id=0))
     with pytest.raises(ActionRejected, match="phase"):
         apply(s1, PickUpTrash(player_id=0))
+
+
+def _hand_with(s, pid, cards):
+    """Prepend `cards` to pid's hand (for deterministic meld tests)."""
+    new_hands = dict(s.hands)
+    new_hands[pid] = list(cards) + new_hands[pid]
+    return s.model_copy(update={"hands": new_hands})
+
+
+def _advance_to_playing(s, pid=0):
+    s, _ = apply(s, Draw(player_id=pid))
+    return s
+
+
+def test_create_meld_valid(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    meld_cards = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+    s = _hand_with(s, 0, meld_cards)
+    s = _advance_to_playing(s)
+
+    s1, events = apply(s, CreateMeld(player_id=0, cards=meld_cards))
+    assert len(s1.melds[0]) == 1
+    assert s1.melds[0][0].cards == meld_cards
+    assert s1.melds[0][0].permanent_dirty is False
+    for c in meld_cards:
+        assert s1.hands[0].count(c) == s.hands[0].count(c) - 1
+    assert len(events) == 1
+    assert isinstance(events[0], MeldCreated)
+
+
+def test_create_meld_too_short(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    meld_cards = [Card(HEARTS, 3), Card(HEARTS, 4)]
+    s = _hand_with(s, 0, meld_cards)
+    s = _advance_to_playing(s)
+    with pytest.raises(ActionRejected, match="valid"):
+        apply(s, CreateMeld(player_id=0, cards=meld_cards))
+
+
+def test_create_meld_not_in_order(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    meld_cards = [Card(HEARTS, 3), Card(SPADES, 4), Card(HEARTS, 5)]
+    s = _hand_with(s, 0, meld_cards)
+    s = _advance_to_playing(s)
+    with pytest.raises(ActionRejected, match="valid"):
+        apply(s, CreateMeld(player_id=0, cards=meld_cards))
+
+
+def test_create_meld_cards_not_in_hand(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    s = _advance_to_playing(s)
+    fake = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+    # Force: clear hand so the "fake" cards are definitely not present
+    s = s.model_copy(update={"hands": {**s.hands, 0: []}})
+    with pytest.raises(ActionRejected, match="hand"):
+        apply(s, CreateMeld(player_id=0, cards=fake))
+
+
+def test_create_meld_wrong_phase(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    with pytest.raises(ActionRejected, match="phase"):
+        apply(s, CreateMeld(player_id=0, cards=[Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]))

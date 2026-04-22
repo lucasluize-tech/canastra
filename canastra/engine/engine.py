@@ -10,6 +10,8 @@ deterministic.
 
 from __future__ import annotations
 
+from canastra.domain.cards import Card
+from canastra.domain.rules import is_in_order, is_permanent_dirty
 from canastra.engine.actions import (
     Action,
     Chin,
@@ -20,8 +22,8 @@ from canastra.engine.actions import (
     PickUpTrash,
 )
 from canastra.engine.errors import ActionRejected
-from canastra.engine.events import CardDrawn, Event, TrashPickedUp
-from canastra.engine.state import GameState, Phase, TurnState
+from canastra.engine.events import CardDrawn, Event, MeldCreated, TrashPickedUp
+from canastra.engine.state import GameState, Meld, Phase, TurnState
 
 
 def _bump_seq(state: GameState, *, updates: dict) -> GameState:
@@ -40,6 +42,26 @@ def _require_phase(state: GameState, *allowed: Phase) -> None:
         raise ActionRejected(
             f"wrong phase: expected {[p.value for p in allowed]}, got {state.current_turn.phase.value}"
         )
+
+
+def _team_of(state: GameState, player_id: int) -> int:
+    for team_id, members in state.teams.items():
+        if player_id in members:
+            return team_id
+    raise ActionRejected(f"unknown player {player_id}")
+
+
+def _remove_cards_from_hand(hand: list[Card], cards: list[Card]) -> list[Card] | None:
+    """Return a new hand with the given cards removed (first-match each),
+    or None if any card isn't present.
+    """
+    remaining = list(hand)
+    for c in cards:
+        try:
+            remaining.remove(c)
+        except ValueError:
+            return None
+    return remaining
 
 
 def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]]:
@@ -89,6 +111,34 @@ def _handle_pickup_trash(state: GameState, action: PickUpTrash) -> tuple[GameSta
     return new_state, [TrashPickedUp(player_id=action.player_id, cards=picked)]
 
 
+def _handle_create_meld(state: GameState, action: CreateMeld) -> tuple[GameState, list[Event]]:
+    _require_turn(state, action.player_id)
+    _require_phase(state, Phase.PLAYING)
+    if not is_in_order(action.cards):
+        raise ActionRejected("cards do not form a valid run")
+
+    new_hand = _remove_cards_from_hand(state.hands[action.player_id], action.cards)
+    if new_hand is None:
+        raise ActionRejected("cards not in hand")
+
+    team_id = _team_of(state, action.player_id)
+    meld = Meld(
+        cards=list(action.cards),
+        permanent_dirty=is_permanent_dirty(action.cards),
+    )
+    new_melds = {**state.melds, team_id: list(state.melds[team_id]) + [meld]}
+    new_hands = {**state.hands, action.player_id: new_hand}
+
+    new_state = _bump_seq(state, updates={"melds": new_melds, "hands": new_hands})
+    event = MeldCreated(
+        player_id=action.player_id,
+        team_id=team_id,
+        meld_id=meld.id,
+        cards=list(action.cards),
+    )
+    return new_state, [event]
+
+
 def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
     if state.phase is Phase.ENDED:
         raise ActionRejected("game has ended")
@@ -98,6 +148,9 @@ def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
 
     if isinstance(action, PickUpTrash):
         return _handle_pickup_trash(state, action)
+
+    if isinstance(action, CreateMeld):
+        return _handle_create_meld(state, action)
 
     # Other handlers land in later tasks.
     raise ActionRejected(f"action not implemented: {type(action).__name__}")
