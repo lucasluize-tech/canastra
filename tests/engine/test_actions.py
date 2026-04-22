@@ -15,11 +15,13 @@ from canastra.engine.actions import (
 from canastra.engine.events import (
     CardDrawn,
     Chinned,
+    DeckReplenished,
     Discarded,
     Event,
     GameEnded,
     MeldCreated,
     MeldExtended,
+    ReserveTaken,
     TrashPickedUp,
     TurnAdvanced,
 )
@@ -47,6 +49,8 @@ def test_all_event_types_construct():
         MeldCreated(player_id=0, team_id=0, meld_id=uuid4(), cards=[Card(HEARTS, 3)]),
         MeldExtended(player_id=0, team_id=0, meld_id=uuid4(), added=[Card(HEARTS, 6)]),
         Discarded(player_id=0, card=Card(HEARTS, 3)),
+        ReserveTaken(player_id=0, team_id=0, reserves_remaining=1),
+        DeckReplenished(team_id=0, cards_added=11),
         TurnAdvanced(next_player_id=1),
         Chinned(team_id=0),
         GameEnded(winning_team=0, scores={0: 1100, 1: 200}),
