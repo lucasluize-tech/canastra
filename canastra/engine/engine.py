@@ -13,7 +13,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from canastra.domain.cards import Card
-from canastra.domain.rules import extends_set, is_in_order, is_permanent_dirty
+from canastra.domain.rules import extends_set, is_clean, is_in_order, is_permanent_dirty
 from canastra.engine.actions import (
     Action,
     CreateMeld,
@@ -25,10 +25,13 @@ from canastra.engine.actions import (
 from canastra.engine.errors import ActionRejected
 from canastra.engine.events import (
     CardDrawn,
+    Chinned,
     Discarded,
     Event,
+    GameEnded,
     MeldCreated,
     MeldExtended,
+    ReserveTaken,
     TrashPickedUp,
     TurnAdvanced,
 )
@@ -78,6 +81,63 @@ def _find_meld(state: GameState, team_id: int, meld_id: UUID) -> int | None:
         if m.id == meld_id:
             return idx
     return None
+
+
+def _team_has_clean_canastra(state: GameState, team_id: int) -> bool:
+    return any(is_clean(m.cards) for m in state.melds[team_id])
+
+
+def _try_empty_hand_resolve(
+    state: GameState,
+    player_id: int,
+    events: list[Event],
+    *,
+    continue_turn: bool,
+) -> tuple[GameState, list[Event]]:
+    """If the player's hand is empty, take a reserve or end the game.
+
+    continue_turn=True: empty-by-play branch, keep same turn/phase=PLAYING.
+    continue_turn=False: empty-by-discard branch, caller has already
+                         advanced the turn; we only swap in the reserve.
+    """
+    if state.hands[player_id]:
+        return state, events
+
+    team_id = _team_of(state, player_id)
+    reserves = state.reserves[team_id]
+    if reserves:
+        new_hand = list(reserves[-1])
+        new_reserves = {**state.reserves, team_id: reserves[:-1]}
+        new_used = {**state.reserves_used, team_id: state.reserves_used[team_id] + 1}
+        new_hands = {**state.hands, player_id: new_hand}
+        updates: dict = {"hands": new_hands, "reserves": new_reserves, "reserves_used": new_used}
+        if continue_turn:
+            updates["current_turn"] = TurnState(player_id=player_id, phase=Phase.PLAYING)
+            updates["phase"] = Phase.PLAYING
+        new_state = state.model_copy(update=updates)
+        events.append(
+            ReserveTaken(
+                player_id=player_id,
+                team_id=team_id,
+                reserves_remaining=len(new_reserves[team_id]),
+            )
+        )
+        return new_state, events
+
+    # No reserves left — end game
+    chin = _team_has_clean_canastra(state, team_id)
+    ended = state.model_copy(
+        update={
+            "phase": Phase.ENDED,
+            "chin_team": team_id if chin else None,
+        }
+    )
+    if chin:
+        events.append(Chinned(team_id=team_id))
+    # Scoring is computed here once the scoring module lands; for now emit
+    # a placeholder GameEnded with empty scores — overwritten by Task 15.
+    events.append(GameEnded(winning_team=None, scores={0: 0, 1: 0}))
+    return ended, events
 
 
 def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]]:
@@ -152,7 +212,10 @@ def _handle_create_meld(state: GameState, action: CreateMeld) -> tuple[GameState
         meld_id=meld.id,
         cards=list(action.cards),
     )
-    return new_state, [event]
+    new_state, events_out = _try_empty_hand_resolve(
+        new_state, action.player_id, [event], continue_turn=True
+    )
+    return new_state, events_out
 
 
 def _handle_extend_meld(state: GameState, action: ExtendMeld) -> tuple[GameState, list[Event]]:
@@ -189,7 +252,10 @@ def _handle_extend_meld(state: GameState, action: ExtendMeld) -> tuple[GameState
         meld_id=meld.id,
         added=list(action.cards),
     )
-    return new_state, [event]
+    new_state, events_out = _try_empty_hand_resolve(
+        new_state, action.player_id, [event], continue_turn=True
+    )
+    return new_state, events_out
 
 
 def _next_player(state: GameState) -> int:
@@ -219,11 +285,14 @@ def _handle_discard(state: GameState, action: Discard) -> tuple[GameState, list[
             "phase": Phase.WAITING_DRAW,
         },
     )
-    events: list[Event] = [
+    base_events: list[Event] = [
         Discarded(player_id=action.player_id, card=action.card),
         TurnAdvanced(next_player_id=next_pid),
     ]
-    return new_state, events
+    new_state, events_out = _try_empty_hand_resolve(
+        new_state, action.player_id, base_events, continue_turn=False
+    )
+    return new_state, events_out
 
 
 def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
