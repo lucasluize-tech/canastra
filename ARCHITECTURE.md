@@ -1,7 +1,7 @@
 # Canastra — Technical Architecture
 
-> **Last updated:** Phase 1 complete (2026-04-18)
-> **Status:** Terminal CLI functional via shims. Pure domain package extracted. Engine/service/delivery layers pending.
+> **Last updated:** Phase 2b complete (2026-04-22)
+> **Status:** Pure domain package and deterministic game engine both shipped. Terminal CLI still runs via legacy shims; service/delivery layers pending.
 
 This document is the structural reference for the Canastra codebase. It is
 updated at the end of every migration phase (see §10). For **rules**, see the
@@ -19,8 +19,8 @@ memory note `project_canastra_rules.md` (the canonical family variant). For
 | Decks | 4 decks, hardcoded | Even N ≥ 2, configurable at game start |
 | Reserves/team | 2, hardcoded | `2 ≤ x ≤ num_decks`, configurable |
 | Persistence | None | Postgres (users, games, action log, snapshots) |
-| Determinism | `random.shuffle` at import time | Seeded RNG per game, replayable |
-| Rules | Legacy `helpers.py` (several gaps) | Full canonical family variant |
+| Determinism | Seeded RNG per game, replayable | ✅ shipped (Phase 2b) |
+| Rules | Full canonical family variant | ✅ shipped (Phase 2a–2b) |
 
 ---
 
@@ -45,14 +45,18 @@ memory note `project_canastra_rules.md` (the canonical family variant). For
                  | Action (domain DTO)
                  v
 +-----------------------------------------------------------------------+
-|  APPLICATION / GAME ENGINE   (Phase 2)                                |
-|    engine.apply(state, action) → (state', events)                     |
-|    Turn state machine:                                                |
-|       WaitingDraw → Playing → Discarding → End                        |
-|    Action types: Draw, PickUpTrash, CreateMeld, ExtendMeld,           |
-|                  Discard, Chin                                        |
-|    Events:       CardDrawn, SetCreated, SetExtended, TurnEnded, ...   |
-|    Deterministic + seeded RNG. Serializable state (pydantic).         |
+|  APPLICATION / GAME ENGINE   (Phase 2 — ✅ shipped)                   |
+|    canastra/engine/engine.py    apply(state, action) → (state', events) |
+|    canastra/engine/state.py     GameConfig, GameState, Meld, Phase    |
+|    canastra/engine/actions.py   Draw, PickUpTrash, CreateMeld,        |
+|                                 ExtendMeld, Discard, Chin             |
+|    canastra/engine/events.py    CardDrawn, MeldCreated, MeldExtended, |
+|                                 Discarded, TurnAdvanced, Chinned,     |
+|                                 ReserveTaken, DeckReplenished,        |
+|                                 TrashPickedUp, GameEnded              |
+|    canastra/engine/scoring.py   end_of_game_score (+ card-removal)   |
+|    canastra/engine/timer.py     forced_discard (priority ladder)      |
+|    Deterministic + seeded RNG. Serializable state (pydantic v2).      |
 |    Forbidden: I/O, sockets, DB, `print`, `input`.                     |
 +-----------------------------------------------------------------------+
                  | uses pure functions
@@ -98,29 +102,50 @@ canastra/                         # repo root
 ├── .pre-commit-config.yaml       # fast hooks (ruff, whitespace, yaml/toml checks)
 ├── .github/workflows/ci.yml      # lint · typecheck · test matrix (py3.11 + py3.12)
 │
-├── canastra/                     # ★ pure package — Phase 1
+├── canastra/                     # ★ pure package — Phase 1 + 2
 │   ├── __init__.py
-│   └── domain/
-│       ├── __init__.py           # re-exports from cards/rules/scoring
-│       ├── cards.py              # Card, Deck, Suit constants, SUITS tuple
-│       ├── rules.py              # WILD_RANK, rank_to_number, is_in_order, is_clean, extends_set
-│       └── scoring.py            # points_for_set (+ points_from_set legacy alias)
+│   ├── domain/                   # Phase 1 — pure rules (no I/O, no state)
+│   │   ├── __init__.py           # re-exports from cards/rules/scoring
+│   │   ├── cards.py              # Card, Deck, Suit constants, SUITS tuple
+│   │   ├── rules.py              # WILD_RANK, rank_to_number, is_in_order, is_clean, extends_set, is_permanent_dirty
+│   │   └── scoring.py            # points_for_set (+ points_from_set legacy alias)
+│   └── engine/                   # Phase 2b — deterministic state machine
+│       ├── __init__.py           # public API: apply, initial_state, Action/Event types, GameConfig/GameState
+│       ├── state.py              # GameConfig, Meld, TurnState, Phase, GameState (pydantic v2)
+│       ├── actions.py            # Action discriminated union (Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin)
+│       ├── events.py             # Event discriminated union (CardDrawn, MeldCreated, ... GameEnded)
+│       ├── errors.py             # ActionRejected
+│       ├── setup.py              # initial_state(config) — seeded deal
+│       ├── engine.py             # apply(state, action) → (state', events) + per-action handlers
+│       ├── scoring.py            # end_of_game_score + card-removal greedy
+│       └── timer.py              # forced_discard priority ladder for timer rule
 │
 ├── deck.py                       # re-export shim → canastra.domain.cards  (Phase 3: delete)
 ├── helpers.py                    # re-export shim → canastra.domain.rules/scoring  (Phase 3: delete)
-├── player.py                     # Player (legacy — mutates Table; Phase 2: replaced by engine)
-├── table.py                      # Table (legacy — god object; Phase 2: replaced by engine state)
-├── main.py                       # module-scope interactive loop (Phase 3: → thin CLI adapter)
+├── player.py                     # Player (legacy — mutates Table; replaced by engine)
+├── table.py                      # Table (legacy — god object; replaced by engine state)
+├── main.py                       # module-scope interactive loop (Phase 3: → thin CLI adapter over engine)
 │
 └── tests/
     ├── test_deck.py              # legacy unittest (verbatim, moved from test.deck.py)
     ├── test_helpers.py           # legacy unittest (verbatim, moved from test.helpers.py)
     ├── test_smoke.py             # import-time smoke for flat modules
-    └── domain/
+    ├── domain/
+    │   ├── __init__.py
+    │   ├── test_cards.py         # deterministic + hypothesis invariants on Card / Deck
+    │   ├── test_rules.py         # deterministic rules (all 5 Phase-2 xfails now passing)
+    │   └── test_scoring.py       # points_for_set tiers
+    └── engine/
         ├── __init__.py
-        ├── test_cards.py         # deterministic + hypothesis invariants on Card / Deck
-        ├── test_rules.py         # deterministic rules + 4 xfail specs for Phase 2
-        └── test_scoring.py       # points_for_set tiers + 1 xfail for A-low+A-high sort
+        ├── conftest.py           # fixtures: cfg_4p2d, _hand_with, _advance_to_playing
+        ├── test_state.py         # GameConfig + serialization invariants
+        ├── test_setup.py         # initial_state determinism + shape
+        ├── test_actions.py       # draw / pickup_trash / create_meld / extend_meld / discard
+        ├── test_chin.py          # empty-hand reserve pickup + chin + game end
+        ├── test_deck_exhaust.py  # deck-empty replenish from reserves
+        ├── test_scoring.py       # end-of-game card-removal + bonus tally
+        ├── test_timer.py         # forced-discard priority ladder
+        └── test_replay.py        # seed + action log → deterministic final state
 ```
 
 **Files marked "Phase 3: delete":** after Phase 3 rewires `main.py` as a thin CLI adapter over the engine, `deck.py`, `helpers.py`, `player.py`, `table.py`, and the top-level `conftest.py` all disappear — the engine replaces them.
@@ -163,21 +188,22 @@ def rank_to_number(rank, high_ace=False) -> int
 def is_in_order(cards: list[Card]) -> bool
 def is_clean(cards: list[Card]) -> bool
 def extends_set(chosen_set: list[Card], card_list: list[Card]) -> bool
+def is_permanent_dirty(cards: list[Card]) -> bool
 ```
 
-**Rule coverage status** (see canonical rules memo for full spec):
+**Rule coverage status** (canonical family variant fully implemented):
 
 | Rule | Covered? | Where |
 |---|---|---|
-| Monotonic same-suit run | ✅ (basic cases) | `is_in_order` |
+| Monotonic same-suit run | ✅ | `is_in_order` |
 | Wild in interior slot | ✅ | `is_in_order` |
 | Ace-low OR Ace-high | ✅ | `is_in_order` + `rank_to_number(high_ace=...)` |
-| Ace-low + Ace-high (1000-pt canastra) | ❌ Phase 2 | xfail test pins the spec |
+| Ace-low + Ace-high (1000-pt canastra) | ✅ | `is_in_order` 14-card path |
 | Clean canastra | ✅ | `is_clean` (≥ 7, natural-2 allowed in rank-2 slot, no other wilds) |
-| Permanent-dirty detection | ❌ Phase 2 | xfail test pins the spec |
-| Wild reinterpretation on extend | ❌ Phase 2 | xfail test pins the spec |
-| Max 2 wilds across suits | ❌ Phase 2 | xfail test pins the spec |
-| `extends_set` validates run structure | ❌ Phase 2 | xfail test pins the spec |
+| Permanent-dirty detection | ✅ | `is_permanent_dirty` (wild-outside-2-slot or duplicate 2) |
+| Wild reinterpretation on extend | ✅ | `extends_set` existential wild-assignment search |
+| Max 2 wilds across suits | ✅ | `extends_set` + `is_in_order` wild cap |
+| `extends_set` validates run structure | ✅ | `extends_set` enforces contiguous run |
 
 ### 4.3 `canastra.domain.scoring`
 
@@ -192,7 +218,7 @@ Table-card bonus (+10/card) is **not** computed here — that's an engine/game-e
 
 ### 4.4 Legacy flat modules (`player.py`, `table.py`, `main.py`)
 
-**Being replaced by the engine in Phase 2.** Treat as frozen — bug fixes only via the engine rewrite, not by editing these files directly.
+**Replaced by the `canastra.engine` package as of Phase 2b.** Treat as frozen — Phase 3 deletes them when `main.py` is rewired as a CLI adapter over the engine.
 
 Known issues preserved from the original code:
 - `Player.drop_set` / `can_extend_set` / `chin` / `remove_from_set` mutate `Table` state directly — violates layer boundaries.
@@ -200,6 +226,95 @@ Known issues preserved from the original code:
 - `Table.__init__` assigns teams by `i % 2` index parity — reordering `players` scrambles teams.
 - `main.py` inner-loop variable `i` shadows the outer turn index (`main.py:131`) — corrupts turn order after first meld.
 - `main.py:286,294,295,320,328` — several scoring/input TypeErrors and a NameError (`points_from_set` now aliased in `scoring.py` to unblock the NameError, the rest remain).
+
+### 4.5 `canastra.engine.state`
+
+```python
+TeamId = int
+PlayerId = int
+
+class GameConfig(BaseModel):          # frozen pydantic v2 model
+    num_players: int                  # even, ≥ 4
+    num_decks: int                    # ≥ 2
+    reserves_per_team: int            # 2 ≤ x ≤ num_decks
+    timer_enabled: bool = False
+    seed: int                         # deterministic RNG seed
+
+class Meld(BaseModel):
+    id: UUID                          # stable identity across turns
+    cards: list[Card]
+    permanent_dirty: bool = False     # sticky once True
+
+class Phase(str, Enum):
+    WAITING_DRAW, PLAYING, ENDED
+
+class TurnState(BaseModel):
+    player_id: PlayerId
+    phase: Phase
+
+class GameState(BaseModel):
+    config: GameConfig
+    action_seq: int                   # increments on every successful apply()
+    seat_order: list[PlayerId]
+    teams: dict[TeamId, list[PlayerId]]
+    hands: dict[PlayerId, list[Card]]
+    melds: dict[TeamId, list[Meld]]
+    reserves: dict[TeamId, list[list[Card]]]   # stack of reserve hands
+    reserves_used: dict[TeamId, int]
+    deck: list[Card]                           # draw pile; top = deck[-1]
+    trash: list[Card]                          # discard pile
+    current_turn: TurnState
+    phase: Phase
+    chin_team: TeamId | None = None
+    winning_team: TeamId | None = None
+```
+
+All models are serializable to/from JSON via `model_dump_json` / `model_validate_json` for action-log replay and future WebSocket transport.
+
+### 4.6 `canastra.engine.actions` and `canastra.engine.events`
+
+Discriminated-union pydantic models. Actions are commands into `apply()`; events are the record emitted back.
+
+```python
+# actions.py
+Action = Draw | PickUpTrash | CreateMeld | ExtendMeld | Discard | Chin
+
+# events.py
+Event = CardDrawn | MeldCreated | MeldExtended | Discarded | TurnAdvanced
+      | TrashPickedUp | ReserveTaken | DeckReplenished | Chinned | GameEnded
+```
+
+`ActionRejected` (in `errors.py`) is raised synchronously for illegal actions — wrong turn, wrong phase, card not in hand, invalid run, etc. Callers decide whether to retry or escalate.
+
+### 4.7 `canastra.engine.engine`
+
+```python
+def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]
+```
+
+Pure dispatcher. Per-action handlers are module-private (`_handle_draw`, `_handle_create_meld`, etc.). Every handler increments `action_seq`, returns a brand-new `GameState` via `model_copy`, and emits zero or more events. The empty-hand/reserve-pickup flow is routed through the shared `_try_empty_hand_resolve` helper from CreateMeld / ExtendMeld / Discard; deck-empty is handled by `_replenish_deck` inside `_handle_draw`.
+
+### 4.8 `canastra.engine.scoring`
+
+```python
+@dataclass(frozen=True)
+class ScoreBreakdown:
+    leftover_debt: int
+    canastra_bonus: int
+    table_points: int
+    reserve_bonus: int
+    chin_bonus: int
+    total: int
+
+def end_of_game_score(state: GameState) -> dict[TeamId, ScoreBreakdown]
+```
+
+Greedy card-removal optimizer: absorb leftover debt (10 × cards-in-hand) by removing (or partially trimming) the cheapest non-canastra sets, then trimming canastras above length 7, then sacrificing whole canastras — but only when the sacrifice is rationally justified (remaining debt ≥ table value of the canastra). Final total floored at 0; bonuses are 100 per reserve used + 100 for the chin team.
+
+### 4.9 `canastra.engine.timer` and `canastra.engine.setup`
+
+- `setup.initial_state(config)` — seeded deal. RNG is `random.Random(config.seed)`; identical configs produce bit-identical states.
+- `timer.forced_discard(state, player_id, rng)` — priority ladder for the optional 1-minute timer rule. Tiers 1–6 (duplicate-opponent-card → extend-permanent-dirty → ... → extend-clean-canastra → neutral), with a hard avoid on wilds and Aces unless the hand contains nothing else.
 
 ---
 
@@ -320,14 +435,7 @@ tests/
 
 ### 7.3 `xfail` as spec
 
-Phase 2 work is documented by `@pytest.mark.xfail(strict=True)` tests. `strict=True` means the test **fails if it unexpectedly passes** — so when Phase 2 implements the missing behavior, those tests flip to "unexpectedly passing" and force me to remove the marker. The xfail list IS the Phase 2 to-do.
-
-Current xfails (5):
-1. `test_ace_low_plus_ace_high_14_card` — `is_in_order` rejects the 14-card canastra
-2. `test_permanent_dirty_wrong_suit_two` — `is_clean` doesn't detect permanent-dirty
-3. `test_extends_rejects_non_run_extension` — `extends_set` ignores run structure
-4. `test_rejects_third_wild_from_any_suit` — `extends_set` under-caps wilds
-5. `test_ace_low_plus_ace_high_1000` — `points_for_set` positional check without sort
+The Phase 2 to-do list was encoded as 5 `@pytest.mark.xfail(strict=True)` tests in `tests/domain/`. All 5 were resolved in Phase 2a — the markers are gone and the assertions are now live. Future phases may reintroduce xfail tests to pin upcoming specs; none are open today.
 
 ### 7.4 Coverage ratchet
 
@@ -335,12 +443,12 @@ Current xfails (5):
 |---|---|---|
 | 0 | 0 (permissive baseline) | ✅ shipped |
 | 1 | 0 (still permissive) | ✅ shipped at 64% actual |
-| 2 | 60 | Engine + domain fully under test |
-| 3 | 75 | CLI thin; everything but the interactive wiring |
-| 4 | 80 | HTTP + WS handlers excluded via pragma where appropriate |
-| 5+ | 85 | Persistence + full stack |
+| 2 | 80 | ✅ shipped at 82% actual (Phase 2b) |
+| 3 | 85 | CLI thin; everything but the interactive wiring |
+| 4 | 85 | HTTP + WS handlers excluded via pragma where appropriate |
+| 5+ | 90 | Persistence + full stack |
 
-Current coverage: **64%** (`canastra.domain` is 95%+; legacy `player.py`/`table.py` pull the average down).
+Current coverage: **82%** (domain + engine both >80%; legacy `player.py`/`table.py`/`main.py` remain at 0% — they'll be deleted in Phase 3).
 
 ---
 
@@ -402,7 +510,7 @@ TODO comments in `ci.yml` sketch the Phase 4 (API integration + Postgres service
 |---|---|---|---|
 | 0 | Test infra — rename dotted files, add pytest, tests/ dir, smoke test | ✅ 2026-04-17 | `pytest` runs + 10 tests pass |
 | 1 | Extract pure domain → `canastra/domain/`, add property tests, xfail Phase 2 specs | ✅ 2026-04-18 | `canastra.domain.*` clean under ruff + mypy strict; 44 pass / 5 xfail |
-| 2 | Game engine state machine. Fix the 5 xfails. Implement wild-reinterpret, permanent-dirty, end-of-game scoring algorithm, timer rule, chin semantics | ⏳ next | `(state, action) → (state', events)` for a full game; chin + deck-exhaust + timer scenarios green |
+| 2 | Game engine state machine. Fix the 5 xfails. Implement wild-reinterpret, permanent-dirty, end-of-game scoring algorithm, timer rule, chin semantics | ✅ 2026-04-22 | `(state, action) → (state', events)` for a full game; chin + deck-exhaust + timer scenarios green |
 | 3 | Rewrite `main.py` as thin CLI adapter over engine; delete legacy shims + `Player`/`Table` + `conftest.py`. Game loop becomes a function. | ⏳ | `python -m canastra` plays end-to-end; no module-scope I/O |
 | 4 | FastAPI HTTP + WebSockets. RoomManager, auth (magic link), private hand broadcasting, reconnect via snapshot replay. | ⏳ | Two browser tabs play a full game over WS |
 | 5 | Postgres persistence: users, games, append-only `action_log`, periodic `snapshots`. | ⏳ | Server restart mid-game → clients reconnect and resume |
