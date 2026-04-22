@@ -26,6 +26,7 @@ from canastra.engine.errors import ActionRejected
 from canastra.engine.events import (
     CardDrawn,
     Chinned,
+    DeckReplenished,
     Discarded,
     Event,
     GameEnded,
@@ -140,20 +141,47 @@ def _try_empty_hand_resolve(
     return ended, events
 
 
+def _replenish_deck(state: GameState) -> tuple[GameState, list[Event]]:
+    """Move one reserve hand into the deck. Prefer team with more reserves.
+
+    Returns a new state with the reserve promoted or the same state
+    unchanged if no reserves exist anywhere.
+    """
+    candidates = sorted(
+        [t for t in (0, 1) if state.reserves[t]],
+        key=lambda t: -len(state.reserves[t]),
+    )
+    if not candidates:
+        return state, []
+    team_id = candidates[0]
+    reserve_cards = list(state.reserves[team_id][-1])
+    new_reserves = {**state.reserves, team_id: state.reserves[team_id][:-1]}
+    # Promoted reserve becomes the deck (bottom append so next pop is top)
+    new_deck = list(state.deck) + reserve_cards
+    new_state = state.model_copy(update={"deck": new_deck, "reserves": new_reserves})
+    return new_state, [DeckReplenished(team_id=team_id, cards_added=len(reserve_cards))]
+
+
 def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]]:
     _require_turn(state, action.player_id)
     _require_phase(state, Phase.WAITING_DRAW)
-    if not state.deck:
-        raise ActionRejected("deck is empty")
 
-    card = state.deck[-1]
-    new_deck = list(state.deck[:-1])
-    new_hand = list(state.hands[action.player_id]) + [card]
-    new_hands = {**state.hands, action.player_id: new_hand}
+    events: list[Event] = []
+    working_state = state
+    if not working_state.deck:
+        working_state, repl_events = _replenish_deck(working_state)
+        events.extend(repl_events)
+        if not working_state.deck:
+            raise ActionRejected("deck and reserves are empty — game cannot continue")
+
+    card = working_state.deck[-1]
+    new_deck = list(working_state.deck[:-1])
+    new_hand = list(working_state.hands[action.player_id]) + [card]
+    new_hands = {**working_state.hands, action.player_id: new_hand}
     new_turn = TurnState(player_id=action.player_id, phase=Phase.PLAYING)
 
     new_state = _bump_seq(
-        state,
+        working_state,
         updates={
             "deck": new_deck,
             "hands": new_hands,
@@ -161,7 +189,8 @@ def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]
             "phase": Phase.PLAYING,
         },
     )
-    return new_state, [CardDrawn(player_id=action.player_id, card=card)]
+    events.append(CardDrawn(player_id=action.player_id, card=card))
+    return new_state, events
 
 
 def _handle_pickup_trash(state: GameState, action: PickUpTrash) -> tuple[GameState, list[Event]]:
