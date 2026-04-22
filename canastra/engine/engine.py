@@ -20,7 +20,7 @@ from canastra.engine.actions import (
     PickUpTrash,
 )
 from canastra.engine.errors import ActionRejected
-from canastra.engine.events import CardDrawn, Event
+from canastra.engine.events import CardDrawn, Event, TrashPickedUp
 from canastra.engine.state import GameState, Phase, TurnState
 
 
@@ -66,12 +66,38 @@ def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]
     return new_state, [CardDrawn(player_id=action.player_id, card=card)]
 
 
+def _handle_pickup_trash(state: GameState, action: PickUpTrash) -> tuple[GameState, list[Event]]:
+    _require_turn(state, action.player_id)
+    _require_phase(state, Phase.WAITING_DRAW)
+    if not state.trash:
+        raise ActionRejected("trash pile is empty")
+
+    picked = list(state.trash)
+    new_hand = list(state.hands[action.player_id]) + picked
+    new_hands = {**state.hands, action.player_id: new_hand}
+    new_turn = TurnState(player_id=action.player_id, phase=Phase.PLAYING)
+
+    new_state = _bump_seq(
+        state,
+        updates={
+            "trash": [],
+            "hands": new_hands,
+            "current_turn": new_turn,
+            "phase": Phase.PLAYING,
+        },
+    )
+    return new_state, [TrashPickedUp(player_id=action.player_id, cards=picked)]
+
+
 def apply(state: GameState, action: Action) -> tuple[GameState, list[Event]]:
     if state.phase is Phase.ENDED:
         raise ActionRejected("game has ended")
 
     if isinstance(action, Draw):
         return _handle_draw(state, action)
+
+    if isinstance(action, PickUpTrash):
+        return _handle_pickup_trash(state, action)
 
     # Other handlers land in later tasks.
     raise ActionRejected(f"action not implemented: {type(action).__name__}")

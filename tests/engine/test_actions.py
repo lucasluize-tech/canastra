@@ -96,3 +96,32 @@ def test_draw_wrong_phase_rejected(cfg_4p2d):
     s1, _ = apply(s, Draw(player_id=0))
     with pytest.raises(ActionRejected, match="phase"):
         apply(s1, Draw(player_id=0))
+
+
+def test_pickup_trash_takes_whole_pile(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    trash = [Card(HEARTS, 5), Card(HEARTS, 6), Card(HEARTS, 7)]
+    s = s.model_copy(update={"trash": trash})
+
+    s1, events = apply(s, PickUpTrash(player_id=0))
+    assert s1.trash == []
+    assert len(s1.hands[0]) == 11 + 3
+    assert s1.hands[0][-3:] == trash
+    assert s1.phase is Phase.PLAYING
+    assert len(events) == 1
+    assert isinstance(events[0], TrashPickedUp)
+    assert events[0].cards == trash
+
+
+def test_pickup_trash_rejects_empty(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    with pytest.raises(ActionRejected, match="empty"):
+        apply(s, PickUpTrash(player_id=0))
+
+
+def test_pickup_trash_wrong_phase(cfg_4p2d):
+    s = initial_state(cfg_4p2d)
+    s = s.model_copy(update={"trash": [Card(HEARTS, 5)]})
+    s1, _ = apply(s, PickUpTrash(player_id=0))
+    with pytest.raises(ActionRejected, match="phase"):
+        apply(s1, PickUpTrash(player_id=0))
