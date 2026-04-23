@@ -29,11 +29,13 @@ def test_draw_from_empty_deck_replenishes_from_reserve(cfg_4p2d):
 
 def test_draw_from_empty_deck_no_reserves_ends_game_after_turn(cfg_4p2d):
     s = initial_state(cfg_4p2d)
-    s = s.model_copy(update={
-        "deck": [],
-        "reserves": {0: [], 1: []},
-        "reserves_used": {0: 2, 1: 2},
-    })
+    s = s.model_copy(
+        update={
+            "deck": [],
+            "reserves": {0: [], 1: []},
+            "reserves_used": {0: 2, 1: 2},
+        }
+    )
     with pytest.raises(ActionRejected):
         # No cards to draw and no reserves → engine can't produce a card
         apply(s, Draw(player_id=0))
@@ -43,10 +45,12 @@ def test_deck_replenish_chooses_team_with_most_reserves_first(cfg_4p2d):
     """Tie-break rule: prefer the team with more reserves (stabilizes behavior)."""
     s = initial_state(cfg_4p2d)
     # Team 0 has 2 reserves, team 1 has 1 reserve
-    s = s.model_copy(update={
-        "deck": [],
-        "reserves": {0: s.reserves[0], 1: s.reserves[1][:1]},
-    })
+    s = s.model_copy(
+        update={
+            "deck": [],
+            "reserves": {0: s.reserves[0], 1: s.reserves[1][:1]},
+        }
+    )
     t0_before = len(s.reserves[0])
     t1_before = len(s.reserves[1])
 

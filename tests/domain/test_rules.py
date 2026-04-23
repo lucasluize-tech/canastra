@@ -9,7 +9,13 @@ to satisfy.
 from __future__ import annotations
 
 from canastra.domain.cards import CLUBS, HEARTS, SPADES, Card
-from canastra.domain.rules import extends_set, is_clean, is_in_order, is_permanent_dirty, rank_to_number
+from canastra.domain.rules import (
+    extends_set,
+    is_clean,
+    is_in_order,
+    is_permanent_dirty,
+    rank_to_number,
+)
 
 
 def _run(suit: str, ranks: list[object]) -> list[Card]:

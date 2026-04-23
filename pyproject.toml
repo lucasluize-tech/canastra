@@ -42,7 +42,20 @@ packages = ["canastra", "canastra.domain", "canastra.engine"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["venv", ".venv", "build", "dist", "__pycache__"]
+extend-exclude = [
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+    # Legacy flat modules + tests — frozen, scheduled for deletion in Phase 3
+    # when main.py becomes a thin CLI adapter over canastra.engine.
+    "main.py",
+    "player.py",
+    "table.py",
+    "tests/test_helpers.py",
+    "tests/test_deck.py",
+]
 
 [tool.ruff.lint]
 # Sensible default set: pycodestyle, pyflakes, isort, bugbear, pyupgrade,

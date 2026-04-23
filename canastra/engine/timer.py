@@ -66,9 +66,7 @@ def _opp_team(state: GameState, player_id: int) -> int:
     raise KeyError(player_id)
 
 
-def forced_discard(
-    state: GameState, player_id: int, rng: random.Random | None = None
-) -> Card:
+def forced_discard(state: GameState, player_id: int, rng: random.Random | None = None) -> Card:
     rng = rng or random.Random()
     hand = state.hands[player_id]
     if not hand:

@@ -194,7 +194,6 @@ def test_create_meld_wrong_phase(cfg_4p2d):
 # ---------------------------------------------------------------------------
 
 
-
 def test_extend_meld_valid(cfg_4p2d):
     s = initial_state(cfg_4p2d)
     base = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
@@ -273,7 +272,10 @@ def test_discard_advances_turn(cfg_4p2d):
 
     s1, events = apply(s, Discard(player_id=0, card=discard_card))
     assert s1.trash[-1] == discard_card
-    assert discard_card not in s1.hands[0] or s1.hands[0].count(discard_card) == s.hands[0].count(discard_card) - 1
+    assert (
+        discard_card not in s1.hands[0]
+        or s1.hands[0].count(discard_card) == s.hands[0].count(discard_card) - 1
+    )
     assert s1.current_turn.player_id == 1
     assert s1.current_turn.phase is Phase.WAITING_DRAW
     assert s1.phase is Phase.WAITING_DRAW

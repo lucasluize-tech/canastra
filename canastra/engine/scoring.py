@@ -47,9 +47,7 @@ def _absorb_debt(melds: list[Meld], debt: int) -> list[Meld]:
     current = list(melds)
 
     # Step 1: whole non-canastra sets first (cheapest first)
-    non_canastras = sorted(
-        [m for m in current if not _is_canastra(m)], key=lambda m: len(m.cards)
-    )
+    non_canastras = sorted([m for m in current if not _is_canastra(m)], key=lambda m: len(m.cards))
     for m in non_canastras:
         if remaining_debt <= 0:
             break
@@ -113,9 +111,7 @@ def _team_table_points(melds: list[Meld]) -> int:
 
 
 def _team_leftover(state: GameState, team_id: TeamId) -> int:
-    return (
-        sum(len(state.hands[pid]) for pid in state.teams[team_id]) * _CARD_POINTS
-    )
+    return sum(len(state.hands[pid]) for pid in state.teams[team_id]) * _CARD_POINTS
 
 
 def _team_breakdown(state: GameState, team_id: TeamId) -> ScoreBreakdown:

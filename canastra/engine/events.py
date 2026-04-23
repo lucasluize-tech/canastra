@@ -8,7 +8,7 @@ the basis of replay.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
@@ -143,17 +143,15 @@ class GameEnded(_EventBase):
 
 
 Event = Annotated[
-    Union[
-        CardDrawn,
-        TrashPickedUp,
-        MeldCreated,
-        MeldExtended,
-        Discarded,
-        ReserveTaken,
-        DeckReplenished,
-        TurnAdvanced,
-        Chinned,
-        GameEnded,
-    ],
+    CardDrawn
+    | TrashPickedUp
+    | MeldCreated
+    | MeldExtended
+    | Discarded
+    | ReserveTaken
+    | DeckReplenished
+    | TurnAdvanced
+    | Chinned
+    | GameEnded,
     Field(discriminator="type"),
 ]

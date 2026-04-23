@@ -202,8 +202,6 @@ def is_permanent_dirty(cards: list[Card]) -> bool:
                 any_interpretation_avoids_slot_2 = True
                 break
 
-        if any_interpretation_avoids_slot_2:
-            return False
-        return True
+        return not any_interpretation_avoids_slot_2
 
     return False

@@ -5,8 +5,8 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from canastra.domain.cards import Card, HEARTS
-from canastra.engine.state import GameConfig, Meld, GameState, Phase, TurnState
+from canastra.domain.cards import HEARTS, Card
+from canastra.engine.state import GameConfig, GameState, Meld, Phase, TurnState
 
 
 def test_config_defaults_for_4p2d():
@@ -23,11 +23,11 @@ def test_config_defaults_for_4p2d():
 @pytest.mark.parametrize(
     "n_players,n_decks,reserves",
     [
-        (3, 2, 2),    # odd players
-        (2, 2, 2),    # below minimum
-        (4, 1, 2),    # odd decks
-        (4, 2, 1),    # reserves below 2
-        (4, 2, 3),    # reserves above num_decks
+        (3, 2, 2),  # odd players
+        (2, 2, 2),  # below minimum
+        (4, 1, 2),  # odd decks
+        (4, 2, 1),  # reserves below 2
+        (4, 2, 3),  # reserves above num_decks
     ],
 )
 def test_config_rejects_invalid(n_players, n_decks, reserves):

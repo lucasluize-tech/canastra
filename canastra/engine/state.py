@@ -8,11 +8,18 @@ it (no accidental in-place mutation).
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from canastra.domain.cards import Card
 
@@ -76,7 +83,7 @@ PlayerId = int
 TeamId = int
 
 
-class Phase(str, Enum):
+class Phase(StrEnum):
     WAITING_DRAW = "waiting_draw"
     PLAYING = "playing"
     DISCARDING = "discarding"

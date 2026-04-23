@@ -8,7 +8,7 @@ current turn (or is a chin / timeout on their team).
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
@@ -92,6 +92,6 @@ class Chin(_ActionBase):
 
 
 Action = Annotated[
-    Union[Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin],
+    Draw | PickUpTrash | CreateMeld | ExtendMeld | Discard | Chin,
     Field(discriminator="type"),
 ]
