@@ -1,99 +1,179 @@
-# Canastra Game
+<div align="center">
+  <h1 align="center">canastra</h1>
+  <h3>A Python implementation of the family-variant Canasta card game.</h3>
+</div>
 
-This is a Python backend implementation of the card game Canasta.
-it is part of my Personal projects to learn Python and it took me about 2 weeks to complete, 3 hours a day, so roughly 40 hours of work.
+<br/>
 
-**Big Thanks**👏 to [Boot.dev](https://boot.dev) for making learning fun.
+<div align="center">
+  <a href="https://github.com/lucasluize-tech/canastra/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/lucasluize-tech/canastra"></a>
+  <a href="https://github.com/lucasluize-tech/canastra/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-blue"></a>
+  <a href="https://github.com/lucasluize-tech/canastra/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/lucasluize-tech/canastra/ci.yml"></a>
+</div>
 
-## Setup
+<br/>
 
-To set up the game locally, follow these steps:
-
-1. Clone the repository:
-   `git clone https://github.com/lucasluize-tech/canastra.git`
-
-2. Navigate into the project directory: `cd canastra`
-3. make sure to get all the requirements: `pip install -r requirements.txt`
-4. Run the game: `python main.py`
-
-## Game Rules
-
-Canastra is a card game where the goal is to 'chin' by getting rid of all of your cards. Players divide into two teams of two, and each team's cards are placed on the table. When the game is over , the team with the most points wins.
-
-#### **Setup**:
-
-11 cards for each player, 4 new hands of 11 cards ( 2 for each team)
-
-#### **Draw Phase:**
-
-each team's player takes turns to play. Each turn, a player can either pick up a card from the deck or pick up the entire discard pile called 'The Trash'. After picking up, the player can play cards from their hand to the table.
-
-#### **Playing cards:**
-
-If a player have a set in hand or can extend a set in the team's table, you can choose to play the cards in the table. A set is a group of cards of the same _suit_, If you don't have a set in the table, a set must be of length 3 or more to start. If you have a set in the table, you can extend it by adding cards of the same _suit_ to it. The card with rank **2** is treated as **Wild Card**, you can use it as a 2 or a card of any rank if needed.
-
-#### **Discard Phase**
-
-After a player finished playing, they must discard a card from their hand to the discard pile.
-
-#### **No Cards in Hand**
-
-If a player have no cards in hand after playing or after discarding:
-
-- if a player played all of your cards without discarding, the player pick up a brand new hand of 11 cards from the separated new hand piles and keep playing.
-- if a player discarded a card, the players passes the turn and get a new hand of 11 cards.
-
-but if there is no new hands left for the team (they got both already) and the player's team has a _CLEAN CANASTRA_, then the player chin and the game ends.
-
-#### **Finishing the Game**
-
-To 'chin', the team needs a _CLEAN CANASTRA_ to end the game.
-A 'Clean Canastra' is a set that has no wild cards in it and length of at least 7 cards (2,3,4,5,6,7,8 of ♣ is a clean canstra).
-
-The game can also end if there are no more cards in the deck. At any time if the deck runs out of cards and there is still new hands to be picked up, one of the new hands becomes the new deck, repeating until there are no more new hands to be picked up.
-
-#### **Scoring**
-
-after a player chin, the game ends and the team's points are calculated:
-
-Points are as following:
-
-- 1000 pts for a Canastra from Ace ... Ace
-- 500 pts for a Canastra from 2 ... Ace
-- 200 pts for a Clean Canastra
-- 100 pts for a Canastra (length 7+)
-- 10 pts for each card still on the table
-- 100 pts for each new hand picked up for the team
-- 100 pts if the team chin
-
-First sum the cards on each team's hands, _each team needs to remove from their table that quantity._
-
-**DISCLAIMER**
-This is my family's way of playing Canastra, it's not the official rules, but it's the way we play it.
-
-For a more 'official' explanation of the rules, see [this guide](https://www.bicyclecards.com/how-to-play/canasta/).
-some of the changes is that we don't use the jokers, we don't use the 'freeze' rule, and we don't use the 'black and red threes' rule.
+A terminal Canastra game built around a deterministic, replayable game engine. Implements the author's family rule variant (no jokers, no freeze, no black/red threes). The codebase is a layered architecture: a pure rules domain, a pydantic-modeled state machine engine, and a thin CLI on top — with a web-multiplayer layer planned for future phases.
 
 ## Features
 
-- Multiplayer: The game supports a even probably infinite number of players and decks, you can edit at `main.py` file.
-- Calculate scoring: The game automatically calculates scores based on the cards in each team's sets.
-- Color-coded output: The game's output is color-coded to make it easier to understand what's happening **on the backend**
-- deck generation: The game automatically generates a deck of cards, distributes hands, and separates the new hands for each team.
-- set validation: The game automatically detects sets in the table and in the player's hand.
-- 'chin' validation: The game automatically detects when a player 'chins' and ends the game.
+- **Family Rule Variant:** Full canonical implementation of the author's family rules — wild reinterpretation, permanent-dirty detection, chin semantics, and the end-of-game card-removal scoring algorithm.
+- **Deterministic Engine:** `apply(state, action) → (state', events)` — pure functions, seeded RNG, serializable pydantic v2 state. Replay any game from `(seed, action_log)`.
+- **Configurable Setup:** Any even N ≥ 4 players, any number of decks ≥ 2, configurable reserve hands per team. No hardcoded 4-player/4-deck limit.
+- **Multi-Team Scoring:** Greedy card-removal optimizer with rational-sacrifice guard — preserves canastras when sacrificing them would lose points.
+- **Timer Rule (Optional):** Six-tier forced-discard priority ladder for time-limited play, with hard avoid on wilds and Aces.
+- **Layered Architecture:** Pure domain → engine → delivery. Engine has zero I/O; ready to drop behind a FastAPI WebSocket layer.
+- **Color-Coded Terminal Output:** Rich, color-coded display of hands, table sets, and turn state.
+
+## Demo
+
+```
+$ python main.py
+Number of players (must be even, >= 4): 4
+Number of decks (>= 2): 2
+Reserve hands per team (2 to num_decks): 2
+Player 1 name: Alice
+Player 2 name: Bob
+Player 3 name: Carol
+Player 4 name: Dave
+
+== Alice's turn ==
+Hand: 3♥ 5♥ 7♣ 9♦ J♠ Q♠ K♠ A♠ 2♥ 4♦ 6♣
+Trash: (empty)
+
+[d]raw / [t]rash / [p]lay / [x]discard / [q]uit:
+```
+
+## Tech Stack
+
+- [Python 3.11+](https://www.python.org/) — Language
+- [Pydantic v2](https://docs.pydantic.dev/) — State + action/event models
+- [pytest](https://docs.pytest.org/) — Test runner
+- [hypothesis](https://hypothesis.readthedocs.io/) — Property-based testing
+- [ruff](https://docs.astral.sh/ruff/) — Linting & formatting
+- [mypy](https://mypy-lang.org/) — Strict type checking on the domain + engine packages
+- [uv](https://docs.astral.sh/uv/) — Package management
+- [colored](https://pypi.org/project/colored/) — Terminal color output
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
+### Install from source
+
+```shell
+git clone https://github.com/lucasluize-tech/canastra.git
+cd canastra
+python -m venv venv
+source venv/bin/activate
+uv pip install -r requirements.txt -r requirements-dev.txt
+```
+
+### Run the game
+
+```shell
+python main.py
+```
+
+The CLI prompts for the number of players, decks, reserve hands per team, and player names — then drops you into the turn loop.
+
+## Usage
+
+### Playing a game
+
+Each turn is a three-phase loop:
+
+1. **Draw** — pull from the deck or pick up the entire trash pile.
+2. **Play** — create a new meld, extend an existing one, or pass.
+3. **Discard** — push one card onto the trash pile and pass to the next player.
+
+Wild cards (rank `2`) can fill any slot in a same-suit run. A meld of length ≥ 7 is a *canastra*; length < 7 is a *short set*. The first team to "chin" — empty their hand with no reserves left and at least one clean canastra — ends the game.
+
+For full rule details, see [`canastra/domain/rules.py`](canastra/domain/rules.py) and the in-tree [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+### Programmatic engine usage
+
+The engine is importable as a pure library:
+
+```python
+from canastra.engine import GameConfig, initial_state, apply, Draw, Discard
+
+cfg = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+state = initial_state(cfg)
+
+state, events = apply(state, Draw(player_id=0))
+state, events = apply(state, Discard(player_id=0, card=state.hands[0][0]))
+```
+
+State is fully serializable via `state.model_dump_json()` and restorable via `GameState.model_validate_json(blob)` — so you can persist mid-game state and resume deterministically.
+
+### Development
+
+```shell
+make ci             # lint + typecheck + tests
+pytest              # full suite + coverage (config in pyproject.toml)
+ruff check .        # lint
+ruff format .       # format
+mypy canastra/      # type check
+```
+
+## Project Structure
+
+```
+canastra/
+├── canastra/
+│   ├── domain/             # Pure rules — no I/O, no state
+│   │   ├── cards.py        # Card, Deck, Suit constants
+│   │   ├── rules.py        # is_in_order, is_clean, extends_set, is_permanent_dirty
+│   │   └── scoring.py      # points_for_set
+│   └── engine/             # Deterministic state machine
+│       ├── state.py        # GameConfig, GameState, Meld, Phase, TurnState (pydantic)
+│       ├── actions.py      # Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin
+│       ├── events.py       # CardDrawn, MeldCreated, ..., GameEnded
+│       ├── engine.py       # apply(state, action) → (state', events)
+│       ├── scoring.py      # End-of-game card-removal optimizer
+│       └── timer.py        # Forced-discard priority ladder
+├── main.py                 # Terminal game loop (Phase 3: → CLI adapter over engine)
+├── tests/                  # 118 tests, 82% coverage
+├── ARCHITECTURE.md         # Structural reference + phase status
+└── pyproject.toml
+```
+
+## Roadmap
+
+This project is being incrementally refactored into a web-multiplayer game. Phase status:
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Test infrastructure | ✅ shipped |
+| 1 | Pure domain package extraction | ✅ shipped |
+| 2 | Game engine state machine | ✅ shipped |
+| 3 | Rewire `main.py` as CLI adapter; delete legacy shims | ⏳ next |
+| 4 | FastAPI HTTP + WebSocket multiplayer | ⏳ |
+| 5 | Postgres persistence (action log + snapshots) | ⏳ |
+| 6 | Web frontend | ⏳ |
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) §10 for details.
+
+## Acknowledgements
+
+Big thanks 👏 to [Boot.dev](https://boot.dev) for making learning fun. This was the author's first Python project — see the [project history](https://github.com/lucasluize-tech/canastra/commits/main) for the journey from a flat-layout terminal game to a layered, type-checked, replayable engine.
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository and create a pull request with your changes.
+Contributions are welcome. Fork the repository, make your changes, and open a pull request. Please ensure tests, lint, and type checks pass before submitting:
 
-you will realize that the game is playable, but it relies on the terminal to show the cards, so although it's a multiplayer game, it's not very fun to play with friends since you all know the cards you are playing with. My intention is to transform this into a web app!
-
-Going forward:
-
-1. Create a API to generate instances of the game when 4 players are connected.
-2. Create a frontend to show the cards and the game state.
+```shell
+pytest
+ruff check .
+ruff format --check .
+mypy canastra/
+```
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
