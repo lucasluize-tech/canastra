@@ -12,6 +12,8 @@ legal.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 class BadInput(Exception):
     """Raised by parse_* helpers when input is structurally invalid."""
@@ -68,3 +70,60 @@ def parse_int_in_range(raw: str, lo: int, hi: int) -> int:
     if n < lo or n > hi:
         raise BadInput(f"expected integer in [{lo}, {hi}], got {n}")
     return n
+
+
+def _reprompt_loop(
+    prompt: str,
+    parse: Callable[[str], object],
+    input_fn: Callable[[str], str],
+    output_fn: Callable[[str], None],
+) -> object:
+    """Common reprompt loop: call input_fn, parse, print error on BadInput."""
+    while True:
+        raw = input_fn(prompt)
+        try:
+            return parse(raw)
+        except BadInput as e:
+            output_fn(f"  {e}. Try again.")
+
+
+def ask_choice(
+    prompt: str,
+    options: set[str],
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> str:
+    return _reprompt_loop(prompt, lambda raw: parse_choice(raw, options), input_fn, output_fn)  # type: ignore[return-value]
+
+
+def ask_yes_no(
+    prompt: str,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> bool:
+    return _reprompt_loop(prompt, parse_yes_no, input_fn, output_fn)  # type: ignore[return-value]
+
+
+def ask_int_in_range(
+    prompt: str,
+    lo: int,
+    hi: int,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> int:
+    return _reprompt_loop(prompt, lambda raw: parse_int_in_range(raw, lo, hi), input_fn, output_fn)  # type: ignore[return-value]
+
+
+def ask_card_indices(
+    prompt: str,
+    hand_size: int,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> list[int]:
+    return _reprompt_loop(
+        prompt, lambda raw: parse_card_indices(raw, hand_size), input_fn, output_fn
+    )  # type: ignore[return-value]

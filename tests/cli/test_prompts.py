@@ -106,3 +106,101 @@ class TestParseIntInRange:
     def test_empty_rejected(self) -> None:
         with pytest.raises(BadInput):
             parse_int_in_range("", lo=1, hi=11)
+
+
+from canastra.cli.prompts import (
+    ask_card_indices,
+    ask_choice,
+    ask_int_in_range,
+    ask_yes_no,
+)
+
+
+def _scripted(inputs: list[str]):
+    """Return a callable that pops from a scripted input list."""
+    it = iter(inputs)
+    return lambda _prompt: next(it)
+
+
+class TestAskWrappers:
+    def test_ask_choice_happy(self) -> None:
+        outputs: list[str] = []
+        result = ask_choice(
+            "Draw from deck or trash? (d/t)",
+            {"d", "t"},
+            input_fn=_scripted(["d"]),
+            output_fn=outputs.append,
+        )
+        assert result == "d"
+        assert outputs == []  # no error lines on happy path
+
+    def test_ask_choice_reprompts_on_bad_input(self) -> None:
+        outputs: list[str] = []
+        result = ask_choice(
+            "Draw from deck or trash? (d/t)",
+            {"d", "t"},
+            input_fn=_scripted(["x", "q", "t"]),
+            output_fn=outputs.append,
+        )
+        assert result == "t"
+        assert len(outputs) == 2  # two rejection messages before success
+
+    def test_ask_yes_no_happy(self) -> None:
+        result = ask_yes_no(
+            "Continue?",
+            input_fn=_scripted(["y"]),
+            output_fn=lambda _: None,
+        )
+        assert result is True
+
+    def test_ask_yes_no_reprompts(self) -> None:
+        outputs: list[str] = []
+        result = ask_yes_no(
+            "Continue?",
+            input_fn=_scripted(["maybe", "n"]),
+            output_fn=outputs.append,
+        )
+        assert result is False
+        assert len(outputs) == 1
+
+    def test_ask_int_in_range_happy(self) -> None:
+        result = ask_int_in_range(
+            "How many?",
+            lo=1,
+            hi=11,
+            input_fn=_scripted(["5"]),
+            output_fn=lambda _: None,
+        )
+        assert result == 5
+
+    def test_ask_int_in_range_reprompts(self) -> None:
+        outputs: list[str] = []
+        result = ask_int_in_range(
+            "How many?",
+            lo=1,
+            hi=11,
+            input_fn=_scripted(["0", "12", "x", "7"]),
+            output_fn=outputs.append,
+        )
+        assert result == 7
+        assert len(outputs) == 3
+
+    def test_ask_card_indices_happy(self) -> None:
+        result = ask_card_indices(
+            "Which cards?",
+            hand_size=11,
+            input_fn=_scripted(["1,2,3"]),
+            output_fn=lambda _: None,
+        )
+        assert result == [1, 2, 3]
+
+    def test_ask_card_indices_reprompts(self) -> None:
+        outputs: list[str] = []
+        result = ask_card_indices(
+            "Which cards?",
+            hand_size=11,
+            input_fn=_scripted(["0,1", "1,1", "1,2"]),
+            output_fn=outputs.append,
+        )
+        assert result == [1, 2]
+        assert len(outputs) == 2
