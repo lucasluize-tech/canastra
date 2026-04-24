@@ -113,6 +113,10 @@ class TestDoPlayPhase:
 
     def test_create_meld_happy(self) -> None:
         state = _state_in_playing()
+        # Sorted by (suit_order=CLUBS<DIAMONDS<HEARTS<SPADES, rank) this becomes:
+        #   1  ♣2    2  ♣10   3  ♦3    4  ♦4    5  ♦J
+        #   6  ♥7    7  ♥8    8  ♥9    9  ♥Q   10  ♠A   11  ♠5   12  ♠6
+        # So the natural 7-8-9♥ meld lives at display indices 6,7,8.
         hand = [
             Card("♥", 7),
             Card("♥", 8),
@@ -135,7 +139,7 @@ class TestDoPlayPhase:
             names=_NAMES,
             input_fn=_scripted(
                 [
-                    "1,2,3",
+                    "6,7,8",
                     "n",
                 ]
             ),
@@ -148,6 +152,11 @@ class TestDoPlayPhase:
 
     def test_rejects_invalid_meld_and_reprompts(self) -> None:
         state = _state_in_playing()
+        # Sorted view:
+        #   1 ♣4  2 ♣5  3 ♣6  4 ♣7  5 ♣8  6 ♣9
+        #   7 ♦3  8 ♥7  9 ♥8 10 ♥9 11 ♥10 12 ♠2
+        # First attempt (1,7,12) picks ♣4 ♦3 ♠2 — mixed suits, rejected.
+        # Second attempt (8,9,10) picks ♥7 ♥8 ♥9 — valid natural run.
         hand = [
             Card("♥", 7),
             Card("♠", 2),
@@ -164,9 +173,9 @@ class TestDoPlayPhase:
             names=_NAMES,
             input_fn=_scripted(
                 [
-                    "1,2,3",
+                    "1,7,12",
                     "n",
-                    "4,5,6",
+                    "8,9,10",
                     "n",
                 ]
             ),

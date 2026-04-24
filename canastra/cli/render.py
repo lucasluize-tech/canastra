@@ -58,10 +58,21 @@ def format_error(message: str) -> str:
 
 
 def format_hand(hand: list[Card]) -> str:
-    """Numbered 1-based card list for the active player's hand."""
+    """Numbered 1-based card list for the active player's hand.
+
+    The hand is sorted (by suit, then rank) before rendering so the
+    player sees a stable grouped order. Red suits (♥, ♦) are colored;
+    black suits are left in the default terminal color.
+    """
     if not hand:
         return "(hand is empty)"
-    lines = [f"  {i + 1:>2}. {card}" for i, card in enumerate(hand)]
+    sorted_hand = sorted(hand)
+    lines: list[str] = []
+    for i, card in enumerate(sorted_hand):
+        if card.suit in ("♥", "♦"):
+            lines.append(f"  {i + 1:>2}. {Fore.red}{card}{_RESET}")
+        else:
+            lines.append(f"  {i + 1:>2}. {card}")
     return "\n".join(lines)
 
 
@@ -130,38 +141,73 @@ def _format_one(ev: Event, names: list[str]) -> str | None:
     return f"  (unknown event: {ev!r})"  # pragma: no cover
 
 
+_BANNER = "=" * 60
+_DIVIDER = "─" * 50
+
+_TEAM_COLOR_NAMES = {0: "yellow", 1: "blue"}
+
+
 def format_table(state: GameState, viewing_player_id: int, names: list[str]) -> str:
     """Render the visible table state as a multi-line string.
 
-    Shows: current player + their team, each team's melds, trash top
-    card, deck size, and per-team reserves-used count. Does NOT reveal
-    other players' hands — only the viewing player's is rendered
-    elsewhere via format_hand.
+    Layout:
+
+        ======================== (60 ``=``)
+          ANA's turn (Team 0)          # colored by current team
+        ========================
+          Deck: N cards    Reserves used: T0 a/m  T1 b/m
+          Trash: <cards inline>        # or ``(empty)``
+
+        [TEAM 0 — yellow]              # colored yellow
+        ────────────────── (50 ``─``)
+          <meld line>
+          (no melds)                   # if none
+
+        [TEAM 1 — blue]
+        ──────────────────
+          <meld line>
+        ========================
+
+    ``viewing_player_id`` is reserved for future per-viewer customization
+    (e.g. inlining the viewer's private hand) and is currently unused.
     """
+    _ = viewing_player_id  # reserved
+
     lines: list[str] = []
     current_pid = state.current_turn.player_id
     current_team = _team_for(state, current_pid)
     current_color = _team_color(current_team)
 
     lines.append("")
+    lines.append(f"{current_color}{_BANNER}{_RESET}")
+    lines.append(f"{current_color}  {names[current_pid]}'s turn (Team {current_team}){_RESET}")
+    lines.append(f"{current_color}{_BANNER}{_RESET}")
+
+    reserves_total = state.config.reserves_per_team
+    reserves_used_0 = state.reserves_used.get(0, 0)
+    reserves_used_1 = state.reserves_used.get(1, 0)
     lines.append(
-        f"{current_color}========= {names[current_pid]} (Team {current_team}) =========={_RESET}"
+        f"  Deck: {len(state.deck)} cards    "
+        f"Reserves used: T0 {reserves_used_0}/{reserves_total}  "
+        f"T1 {reserves_used_1}/{reserves_total}"
     )
-    lines.append(f"  Deck: {len(state.deck)} cards   Trash top: {_trash_top(state)}")
+    lines.append(f"  Trash: {_trash_inline(state)}")
     lines.append("")
 
     for team_id in (0, 1):
         color = _team_color(team_id)
+        color_name = _TEAM_COLOR_NAMES.get(team_id, "")
         melds = state.melds.get(team_id, [])
-        reserves_used = state.reserves_used.get(team_id, 0)
-        reserves_total = state.config.reserves_per_team
-        lines.append(
-            f"  {color}Team {team_id} — melds: {len(melds)}, "
-            f"reserves used: {reserves_used}/{reserves_total}{_RESET}"
-        )
-        for m in melds:
-            lines.append(f"    {_meld_line(m)}")
-    lines.append("")
+        lines.append(f"{color}[TEAM {team_id} — {color_name}]{_RESET}")
+        lines.append(f"{color}{_DIVIDER}{_RESET}")
+        if not melds:
+            lines.append("  (no melds)")
+        else:
+            for m in melds:
+                lines.append(f"  {_meld_line(m)}")
+        lines.append("")
+
+    lines.append(f"{_BANNER}")
     return "\n".join(lines)
 
 
@@ -172,8 +218,10 @@ def _team_for(state: GameState, player_id: int) -> int:
     return -1
 
 
-def _trash_top(state: GameState) -> str:
-    return str(state.trash[-1]) if state.trash else "(empty)"
+def _trash_inline(state: GameState) -> str:
+    if not state.trash:
+        return "(empty)"
+    return " ".join(str(c) for c in state.trash)
 
 
 def _meld_line(m: Meld) -> str:

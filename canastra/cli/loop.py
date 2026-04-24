@@ -64,6 +64,7 @@ def run(
         while state.phase != Phase.ENDED:
             pid = state.current_turn.player_id
             output_fn(format_table(state, viewing_player_id=pid, names=names))
+            output_fn(format_hand(state.hands[pid]))
 
             if state.current_turn.phase == Phase.WAITING_DRAW:
                 state, _ = _do_draw_phase(
@@ -149,8 +150,10 @@ def _do_play_phase(
     """
     pid = state.current_turn.player_id
     while True:
-        hand = state.hands[pid]
-        output_fn(format_hand(hand))
+        # format_hand sorts internally; use the same sorted view for index lookup
+        # so the card at position i in the displayed list matches hand[i - 1].
+        hand = sorted(state.hands[pid])
+        output_fn(format_hand(state.hands[pid]))
         raw = input_fn("Play a set or 'd' to move to discard: ")
         if raw.strip().lower() == "d":
             return state, [], "discard_requested"
@@ -234,8 +237,9 @@ def _do_discard(
     transitions to WAITING_DRAW for the next player on success.
     """
     pid = state.current_turn.player_id
-    hand = state.hands[pid]
-    output_fn(format_hand(hand))
+    # format_hand sorts internally; keep our index lookup on the same sorted view.
+    hand = sorted(state.hands[pid])
+    output_fn(format_hand(state.hands[pid]))
 
     while True:
         idx = ask_int_in_range(

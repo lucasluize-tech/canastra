@@ -26,6 +26,17 @@ SPADES: Suit = "♠"
 
 SUITS: tuple[Suit, ...] = (CLUBS, DIAMONDS, HEARTS, SPADES)
 
+_SHORT_RANK: dict[Any, str] = {
+    "Ace": "A",
+    "Jack": "J",
+    "Queen": "Q",
+    "King": "K",
+}
+
+
+def _short(rank: Any) -> str:
+    return _SHORT_RANK.get(rank, str(rank))
+
 
 class Card:
     rank_order: dict[Any, int] = {
@@ -50,10 +61,10 @@ class Card:
         self.rank = rank
 
     def __str__(self) -> str:
-        return f"({self.rank},{self.suit[0].capitalize()})"
+        return f"{_short(self.rank)}{self.suit}"
 
     def __repr__(self) -> str:
-        return f"({self.rank},{self.suit[0].capitalize()})"
+        return f"{_short(self.rank)}{self.suit}"
 
     def _cmp_key(self) -> tuple[int, int]:
         return (self.suit_order[self.suit], self.rank_order[self.rank])

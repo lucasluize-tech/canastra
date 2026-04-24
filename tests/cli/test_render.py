@@ -42,7 +42,7 @@ class TestFormatHand:
     def test_single_card(self) -> None:
         out = _strip_ansi(format_hand([Card("♥", 7)]))
         assert "1" in out
-        assert "7" in out or "♥" in out
+        assert "7♥" in out
 
     def test_numbers_are_one_based(self) -> None:
         hand = [Card("♥", 7), Card("♠", "King"), Card("♦", 2)]
@@ -50,10 +50,11 @@ class TestFormatHand:
         assert "1" in out and "2" in out and "3" in out
 
     def test_preserves_order(self) -> None:
-        hand = [Card("♥", 7), Card("♠", "King")]
+        # Hearts sort before Spades, so 7♥ comes before K♠ in the sorted display.
+        hand = [Card("♠", "King"), Card("♥", 7)]
         out = _strip_ansi(format_hand(hand))
         idx7 = out.index("7")
-        idxK = out.index("King")
+        idxK = out.index("K")
         assert idx7 < idxK
 
 
@@ -160,7 +161,9 @@ def test_format_table_happy() -> None:
     state = initial_state(config)
     out = _strip_ansi(format_table(state, viewing_player_id=0, names=_NAMES))
     assert "Ana" in out  # current player
-    assert "Team 0" in out and "Team 1" in out
+    # Headers use "TEAM 0 — yellow" / "TEAM 1 — blue", parenthesized form
+    # "(Team 0)" on the banner line.
+    assert "TEAM 0" in out and "TEAM 1" in out
     assert "deck" in out.lower() or "cards" in out.lower()
     assert "trash" in out.lower()
 
@@ -170,7 +173,7 @@ def test_format_table_shows_trash_top() -> None:
     state = initial_state(config)
     state = state.model_copy(update={"trash": [Card("♠", "King")]})
     out = _strip_ansi(format_table(state, viewing_player_id=0, names=_NAMES))
-    assert "King" in out
+    assert "K♠" in out
 
 
 def test_format_table_lists_melds_by_team() -> None:
