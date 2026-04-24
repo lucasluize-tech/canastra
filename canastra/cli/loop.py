@@ -170,11 +170,20 @@ def _do_play_phase(
         cards = [hand[i - 1] for i in indices]
         team_id = _team_for(state, pid)
         team_melds = state.melds.get(team_id, [])
+        extendable = [m for m in team_melds if extends_set(list(m.cards), cards)]
 
-        # Fewer than 3 cards can only be an extension (no new meld is that small).
-        # Skip the n/e prompt in that case.
+        # Infer the target whenever only one action makes sense:
+        #   - <3 cards with no extendable meld: impossible (can't create, can't extend) -> error.
+        #   - <3 cards with an extendable meld: must be extend.
+        #   - >=3 cards with no extendable meld: must be new.
+        # Only prompt when both options are viable.
+        if len(cards) < 3 and not extendable:
+            output_fn(format_error("fewer than 3 cards and no existing meld can accept them"))
+            continue
         if len(cards) < 3:
             target = "e"
+        elif not extendable:
+            target = "n"
         else:
             target = ask_choice(
                 "New set or extend existing? (n/e): ",
@@ -187,10 +196,6 @@ def _do_play_phase(
         if target == "n":
             action = CreateMeld(player_id=pid, cards=cards)
         else:
-            extendable = [m for m in team_melds if extends_set(list(m.cards), cards)]
-            if not extendable:
-                output_fn(format_error("no existing meld can accept these cards"))
-                continue
             if len(extendable) == 1:
                 meld = extendable[0]
                 output_fn(f"  auto-selected: {_meld_line_for_listing(meld)}")

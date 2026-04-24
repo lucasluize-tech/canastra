@@ -192,6 +192,40 @@ class TestDoPlayPhase:
             or len([o for o in outputs if "\x1b" in o]) >= 1
         )
 
+    def test_new_meld_when_no_extendable_skips_ne_prompt(self) -> None:
+        """When the team has zero melds that can accept the selected cards,
+        the helper must skip the n/e prompt and default to 'new'. Scripted
+        input contains NO 'n' choice — if the prompt was issued we'd hit
+        StopIteration / EOFError on the input iterator."""
+        state = _state_in_playing()
+        hand = [
+            Card("♥", 7),
+            Card("♥", 8),
+            Card("♥", 9),
+            Card("♠", 5),
+            Card("♠", 6),
+            Card("♦", 4),
+            Card("♦", "Jack"),
+            Card("♣", 2),
+            Card("♣", 10),
+            Card("♥", "Queen"),
+            Card("♠", "Ace"),
+            Card("♦", 3),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+
+        # Only one input — indices. No "n" scripted.
+        new_state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["6,7,8"]),
+            output_fn=lambda _: None,
+        )
+
+        assert kind == "meld"
+        assert any(isinstance(e, MeldCreated) for e in events)
+        assert len(new_state.hands[0]) == len(hand) - 3
+
     def test_single_card_extend_skips_prompt_and_auto_selects(self) -> None:
         """Picking 1 card must skip the n/e prompt AND auto-pick the only
         extendable meld, so the flow is just: indices -> engine applies."""
