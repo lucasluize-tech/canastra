@@ -27,14 +27,11 @@ dev = [
 ]
 
 # ---------------------------------------------------------------------------
-# setuptools: Phase 1 ships the `canastra` package (pure domain). The flat
-# files (deck.py, player.py, table.py, helpers.py, main.py) remain at the
-# repo root as thin re-export shims + the CLI entry. They'll be deleted in
-# Phase 3 when main.py becomes a CLI adapter inside the package.
+# setuptools: canastra package layout. Phase 3 deleted the legacy flat
+# modules — the entry point is now `python -m canastra` via canastra/__main__.py.
 # ---------------------------------------------------------------------------
 [tool.setuptools]
-py-modules = ["deck", "player", "table", "helpers", "main"]
-packages = ["canastra", "canastra.domain", "canastra.engine"]
+packages = ["canastra", "canastra.domain", "canastra.engine", "canastra.cli"]
 
 # ---------------------------------------------------------------------------
 # Ruff: lint + format. Replaces black + isort + flake8.
