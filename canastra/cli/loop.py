@@ -16,7 +16,14 @@ from canastra.cli.prompts import (
     ask_yes_no,
     parse_card_indices,
 )
-from canastra.cli.render import format_error, format_events, format_hand
+from canastra.cli.render import (
+    format_error,
+    format_events,
+    format_hand,
+    format_score,
+    format_table,
+)
+from canastra.cli.setup import build_config_interactive
 from canastra.engine import (
     ActionRejected,
     CreateMeld,
@@ -26,8 +33,11 @@ from canastra.engine import (
     ExtendMeld,
     GameState,
     Meld,
+    Phase,
     PickUpTrash,
     apply,
+    end_of_game_score,
+    initial_state,
 )
 
 
@@ -36,7 +46,61 @@ def run(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> int:
-    raise NotImplementedError("filled in by Task 11")
+    """Play an interactive Canastra game to completion.
+
+    Returns:
+        0 on normal end-of-game.
+        130 on EOFError / KeyboardInterrupt (Unix convention).
+    """
+    try:
+        config, names = build_config_interactive(
+            input_fn=input_fn, output_fn=output_fn
+        )
+    except (EOFError, KeyboardInterrupt):
+        output_fn("\nGame canceled during setup.")
+        return 130
+
+    state = initial_state(config)
+
+    try:
+        while state.phase != Phase.ENDED:
+            pid = state.current_turn.player_id
+            output_fn(format_table(state, viewing_player_id=pid, names=names))
+
+            if state.current_turn.phase == Phase.WAITING_DRAW:
+                state, _ = _do_draw_phase(
+                    state, names=names, input_fn=input_fn, output_fn=output_fn
+                )
+                continue
+
+            # PLAYING (and/or transient DISCARDING): inner loop until discard or game end.
+            while (
+                state.current_turn.phase in {Phase.PLAYING, Phase.DISCARDING}
+                and state.phase != Phase.ENDED
+            ):
+                new_state, _events, kind = _do_play_phase(
+                    state, names=names, input_fn=input_fn, output_fn=output_fn
+                )
+                if kind == "discard_requested":
+                    discard_result = _do_discard(
+                        state, names=names, input_fn=input_fn, output_fn=output_fn
+                    )
+                    if discard_result is None:
+                        # player canceled — stay in play loop
+                        continue
+                    state, _ = discard_result
+                    break  # turn ends after successful discard
+                # kind == "meld": state updated, keep playing
+                state = new_state
+
+    except (EOFError, KeyboardInterrupt):
+        output_fn("\nGame canceled.")
+        return 130
+
+    # End-of-game scoring
+    breakdowns = end_of_game_score(state)
+    output_fn(format_score(breakdowns, names))
+    return 0
 
 
 def _do_draw_phase(

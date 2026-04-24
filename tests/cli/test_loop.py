@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from canastra.cli.loop import _do_discard, _do_draw_phase, _do_play_phase
+import pytest
+
+from canastra.cli.loop import _do_discard, _do_draw_phase, _do_play_phase, run
 from canastra.domain.cards import Card
 from canastra.engine import (
     CardDrawn,
@@ -225,3 +227,39 @@ class TestDoDiscard:
             output_fn=outputs.append,
         )
         assert any(isinstance(e, Discarded) for e in events)
+
+
+class TestRun:
+    def test_run_plays_first_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """End-to-end test: script enough inputs to get through player 0's turn
+        and verify the game advances."""
+        monkeypatch.setenv("CANASTRA_SEED", "42")
+        inputs = iter([
+            "4", "2", "2",
+            "Ana", "Bruno", "Carla", "Davi",
+            "d",
+            "d",
+            "1",
+            "y",
+        ])
+
+        outputs: list[str] = []
+
+        def input_fn(_prompt: str) -> str:
+            try:
+                return next(inputs)
+            except StopIteration as e:
+                raise EOFError from e
+
+        exit_code = run(input_fn=input_fn, output_fn=outputs.append)
+
+        assert exit_code == 130
+        combined = "\n".join(outputs)
+        assert "Ana" in combined
+        assert "discard" in combined.lower()
+
+    def test_run_announces_end_of_game_when_scored(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tracked by the manual smoke playthrough in Task 13."""
+        pytest.skip("end-to-end chin scripting covered by manual smoke in Task 13")
