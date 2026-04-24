@@ -124,4 +124,4 @@ def _format_one(ev: Event, names: list[str]) -> str | None:
     if isinstance(ev, GameEnded):
         scored = ", ".join(f"Team {t}: {s}" for t, s in sorted(ev.scores.items()))
         return f"  Game over. {scored}"
-    return f"  (unknown event: {ev!r})"
+    return f"  (unknown event: {ev!r})"  # pragma: no cover
