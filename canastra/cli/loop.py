@@ -18,6 +18,7 @@ from canastra.engine import (
     Event,
     ExtendMeld,
     GameState,
+    Meld,
     PickUpTrash,
     apply,
 )
@@ -139,16 +140,8 @@ def _team_for(state: GameState, player_id: int) -> int:
     return -1
 
 
-def _meld_line_for_listing(m: object) -> str:
-    """Format a meld for the extend-meld selection list.
-
-    Lives in loop.py (not render.py) because it's the listing-specific
-    format used only by the interactive extend-meld flow. Keeps render.py's
-    _meld_line free to evolve independently.
-    """
-    from canastra.engine import Meld
-
-    assert isinstance(m, Meld)
+def _meld_line_for_listing(m: Meld) -> str:
+    """Format a meld for the extend-meld selection list."""
     cards = " ".join(str(c) for c in m.cards)
     flag = " [dirty]" if m.permanent_dirty else ""
     short = str(m.id)[:6]
