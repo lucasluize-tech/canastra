@@ -1,7 +1,7 @@
 # Canastra — Technical Architecture
 
-> **Last updated:** Phase 2b complete (2026-04-22)
-> **Status:** Pure domain package and deterministic game engine both shipped. Terminal CLI still runs via legacy shims; service/delivery layers pending.
+> **Last updated:** Phase 3 complete (2026-04-23)
+> **Status:** Pure domain package, deterministic game engine, and thin CLI adapter all shipped. Legacy flat modules deleted; service/delivery layers pending.
 
 This document is the structural reference for the Canastra codebase. It is
 updated at the end of every migration phase (see §10). For **rules**, see the
@@ -15,7 +15,7 @@ memory note `project_canastra_rules.md` (the canonical family variant). For
 | Dimension | Today | Target |
 |---|---|---|
 | Interface | Terminal (blocking stdin) | Web (WebSocket multiplayer + HTTP lobby) |
-| Players | 2 teams × 2 players, hardcoded in `main.py` | Any even N ≥ 4, 2 teams of N/2 |
+| Players | Configurable via `canastra.cli.setup` prompts + `canastra.engine.setup.initial_state` | Any even N ≥ 4, 2 teams of N/2 |
 | Decks | 4 decks, hardcoded | Even N ≥ 2, configurable at game start |
 | Reserves/team | 2, hardcoded | `2 ≤ x ≤ num_decks`, configurable |
 | Persistence | None | Postgres (users, games, action log, snapshots) |
@@ -95,60 +95,62 @@ canastra/                         # repo root
 ├── CLAUDE.md                     # harness instructions for Claude Code
 ├── README.md                     # player-facing rules + roadmap
 ├── Makefile                      # install-dev, lint, format, typecheck, test, ci
-├── conftest.py                   # sys.path shim for flat-layout imports (DELETE in Phase 3)
 ├── pyproject.toml                # project metadata, ruff/pytest/coverage/mypy config
 ├── requirements.txt              # runtime deps (colored)
 ├── requirements-dev.txt          # pytest, hypothesis, ruff, mypy, pre-commit
 ├── .pre-commit-config.yaml       # fast hooks (ruff, whitespace, yaml/toml checks)
 ├── .github/workflows/ci.yml      # lint · typecheck · test matrix (py3.11 + py3.12)
 │
-├── canastra/                     # ★ pure package — Phase 1 + 2
+├── canastra/                     # ★ pure package — Phase 1 + 2 + 3
 │   ├── __init__.py
+│   ├── __main__.py               # python -m canastra entry point — `raise SystemExit(run())`
 │   ├── domain/                   # Phase 1 — pure rules (no I/O, no state)
 │   │   ├── __init__.py           # re-exports from cards/rules/scoring
 │   │   ├── cards.py              # Card, Deck, Suit constants, SUITS tuple
 │   │   ├── rules.py              # WILD_RANK, rank_to_number, is_in_order, is_clean, extends_set, is_permanent_dirty
 │   │   └── scoring.py            # points_for_set (+ points_from_set legacy alias)
-│   └── engine/                   # Phase 2b — deterministic state machine
-│       ├── __init__.py           # public API: apply, initial_state, Action/Event types, GameConfig/GameState
-│       ├── state.py              # GameConfig, Meld, TurnState, Phase, GameState (pydantic v2)
-│       ├── actions.py            # Action discriminated union (Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin)
-│       ├── events.py             # Event discriminated union (CardDrawn, MeldCreated, ... GameEnded)
-│       ├── errors.py             # ActionRejected
-│       ├── setup.py              # initial_state(config) — seeded deal
-│       ├── engine.py             # apply(state, action) → (state', events) + per-action handlers
-│       ├── scoring.py            # end_of_game_score + card-removal greedy
-│       └── timer.py              # forced_discard priority ladder for timer rule
-│
-├── deck.py                       # re-export shim → canastra.domain.cards  (Phase 3: delete)
-├── helpers.py                    # re-export shim → canastra.domain.rules/scoring  (Phase 3: delete)
-├── player.py                     # Player (legacy — mutates Table; replaced by engine)
-├── table.py                      # Table (legacy — god object; replaced by engine state)
-├── main.py                       # module-scope interactive loop (Phase 3: → thin CLI adapter over engine)
+│   ├── engine/                   # Phase 2b — deterministic state machine
+│   │   ├── __init__.py           # public API: apply, initial_state, Action/Event types, GameConfig/GameState
+│   │   ├── state.py              # GameConfig, Meld, TurnState, Phase, GameState (pydantic v2)
+│   │   ├── actions.py            # Action discriminated union (Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin)
+│   │   ├── events.py             # Event discriminated union (CardDrawn, MeldCreated, ... GameEnded)
+│   │   ├── errors.py             # ActionRejected
+│   │   ├── setup.py              # initial_state(config) — seeded deal
+│   │   ├── engine.py             # apply(state, action) → (state', events) + per-action handlers
+│   │   ├── scoring.py            # end_of_game_score + card-removal greedy
+│   │   └── timer.py              # forced_discard priority ladder for timer rule
+│   └── cli/                      # Phase 3 — thin interactive adapter over engine
+│       ├── __init__.py           # exports run
+│       ├── setup.py              # build_config_interactive — prompts → (GameConfig, names)
+│       ├── prompts.py            # BadInput + parse_* + ask_* wrappers
+│       ├── render.py             # format_hand / _table / _events / _score / _error
+│       └── loop.py               # run() + _do_draw_phase / _do_play_phase / _do_discard
 │
 └── tests/
-    ├── test_deck.py              # legacy unittest (verbatim, moved from test.deck.py)
-    ├── test_helpers.py           # legacy unittest (verbatim, moved from test.helpers.py)
-    ├── test_smoke.py             # import-time smoke for flat modules
     ├── domain/
     │   ├── __init__.py
     │   ├── test_cards.py         # deterministic + hypothesis invariants on Card / Deck
     │   ├── test_rules.py         # deterministic rules (all 5 Phase-2 xfails now passing)
     │   └── test_scoring.py       # points_for_set tiers
-    └── engine/
-        ├── __init__.py
-        ├── conftest.py           # fixtures: cfg_4p2d, _hand_with, _advance_to_playing
-        ├── test_state.py         # GameConfig + serialization invariants
-        ├── test_setup.py         # initial_state determinism + shape
-        ├── test_actions.py       # draw / pickup_trash / create_meld / extend_meld / discard
-        ├── test_chin.py          # empty-hand reserve pickup + chin + game end
-        ├── test_deck_exhaust.py  # deck-empty replenish from reserves
-        ├── test_scoring.py       # end-of-game card-removal + bonus tally
-        ├── test_timer.py         # forced-discard priority ladder
-        └── test_replay.py        # seed + action log → deterministic final state
+    ├── engine/
+    │   ├── __init__.py
+    │   ├── conftest.py           # fixtures: cfg_4p2d, _hand_with, _advance_to_playing
+    │   ├── test_state.py         # GameConfig + serialization invariants
+    │   ├── test_setup.py         # initial_state determinism + shape
+    │   ├── test_actions.py       # draw / pickup_trash / create_meld / extend_meld / discard
+    │   ├── test_chin.py          # empty-hand reserve pickup + chin + game end
+    │   ├── test_deck_exhaust.py  # deck-empty replenish from reserves
+    │   ├── test_scoring.py       # end-of-game card-removal + bonus tally
+    │   ├── test_timer.py         # forced-discard priority ladder
+    │   └── test_replay.py        # seed + action log → deterministic final state
+    └── cli/
+        ├── test_scaffold.py      # package import sanity
+        ├── test_prompts.py       # parse_* (BadInput cases) + ask_* reprompt loops
+        ├── test_render.py        # format_hand / _table / _events / _score / _error
+        ├── test_setup.py         # build_config_interactive prompts + CANASTRA_SEED env
+        ├── test_loop.py          # run() phase dispatch + EOF → 130 + scripted game
+        └── test_main_module.py   # `python -m canastra` subprocess smoke
 ```
-
-**Files marked "Phase 3: delete":** after Phase 3 rewires `main.py` as a thin CLI adapter over the engine, `deck.py`, `helpers.py`, `player.py`, `table.py`, and the top-level `conftest.py` all disappear — the engine replaces them.
 
 ---
 
@@ -209,23 +211,16 @@ def is_permanent_dirty(cards: list[Card]) -> bool
 
 ```python
 def points_for_set(s: list[Card]) -> int
-def points_from_set(s: list[Card]) -> int   # legacy alias — main.py calls this
+def points_from_set(s: list[Card]) -> int   # legacy alias kept for backward compat
 ```
 
 Bonus tiers: 1000 (A-low + A-high, 14 cards) / 500 (2…A, 13 cards) / 200 (clean canastra, ≥ 7) / 100 (dirty canastra, ≥ 7) / 0 (shorter sets).
 
 Table-card bonus (+10/card) is **not** computed here — that's an engine/game-end-scoring concern and will live in `canastra.engine.scoring` (Phase 2).
 
-### 4.4 Legacy flat modules (`player.py`, `table.py`, `main.py`)
+### 4.4 Legacy flat modules — **deleted in Phase 3**
 
-**Replaced by the `canastra.engine` package as of Phase 2b.** Treat as frozen — Phase 3 deletes them when `main.py` is rewired as a CLI adapter over the engine.
-
-Known issues preserved from the original code:
-- `Player.drop_set` / `can_extend_set` / `chin` / `remove_from_set` mutate `Table` state directly — violates layer boundaries.
-- `Table._team_has_clean_canastra` (`table.py:69`) calls a non-existent method (`s._is_clean()`) — crashes if reached.
-- `Table.__init__` assigns teams by `i % 2` index parity — reordering `players` scrambles teams.
-- `main.py` inner-loop variable `i` shadows the outer turn index (`main.py:131`) — corrupts turn order after first meld.
-- `main.py:286,294,295,320,328` — several scoring/input TypeErrors and a NameError (`points_from_set` now aliased in `scoring.py` to unblock the NameError, the rest remain).
+The former flat-layout modules (`main.py`, `deck.py`, `helpers.py`, `player.py`, `table.py`) and the root `conftest.py` sys.path shim were removed in Phase 3 once `canastra.cli` became the only interactive entry point. See §4.10 for the replacement and §10 for the phase log.
 
 ### 4.5 `canastra.engine.state`
 
@@ -316,6 +311,18 @@ Greedy card-removal optimizer: absorb leftover debt (10 × cards-in-hand) by rem
 - `setup.initial_state(config)` — seeded deal. RNG is `random.Random(config.seed)`; identical configs produce bit-identical states.
 - `timer.forced_discard(state, player_id, rng)` — priority ladder for the optional 1-minute timer rule. Tiers 1–6 (duplicate-opponent-card → extend-permanent-dirty → ... → extend-clean-canastra → neutral), with a hard avoid on wilds and Aces unless the hand contains nothing else.
 
+### 4.10 `canastra.cli`
+
+Interactive terminal adapter over `canastra.engine` — translates user input into engine actions and engine events into rendered output. Holds no game logic of its own; every rule decision is delegated to `engine.apply`.
+
+- **`setup.py`** — `build_config_interactive(*, input_fn, output_fn) -> (GameConfig, list[str])`. Prompts for `num_players` (1–32), `num_decks` (1–16), `reserves_per_team` (1–16), and a name per player. Empty name falls back to `Player{i+1}`. Seed is read from `CANASTRA_SEED` env var or drawn at random.
+- **`prompts.py`** — `BadInput` exception, pure parsers (`parse_card_indices`, `parse_yes_no`, `parse_choice`, `parse_int_in_range`), and interactive reprompt-loop wrappers (`ask_choice`, `ask_yes_no`, `ask_int_in_range`, `ask_card_indices`). Every wrapper takes injected `input_fn`/`output_fn` callables; parsers stay pure and raise `BadInput` on any invalid input.
+- **`render.py`** — Pure formatters with no I/O: `format_hand`, `format_error`, `format_events` (covers all 10 engine events, including the silent `TurnAdvanced`), `format_table`, `format_score`. Team colors are `{0: Fore.yellow, 1: Fore.blue}`.
+- **`loop.py`** — `run(*, input_fn=input, output_fn=print) -> int`. Returns `0` on normal end-of-game, `130` on `EOFError` / `KeyboardInterrupt`. Phase-dispatched turn loop via `_do_draw_phase`, `_do_play_phase` (which loops internally on bad input and returns `"meld"` or `"discard_requested"`), and `_do_discard` (returns `(state, events) | None`, where `None` means the user cancelled the discard and returns to the play phase). Helpers print events via `format_events` internally; `run()` stays a pure phase dispatcher.
+- **`__main__.py`** — 5-line entry point: `raise SystemExit(run())`.
+
+**Contract:** `run(input_fn, output_fn) → int`, exit code `0` on normal end-of-game, `130` on EOF. Every I/O is routed through the injected callables so tests use scripted input lists without monkeypatching `stdin`/`stdout`.
+
 ---
 
 ## 5. Data & State Model (current)
@@ -370,17 +377,24 @@ Each `Meld` carries a stable id, its cards, and a `permanent_dirty: bool` flag �
 ### 6.1 Today (terminal)
 
 ```
-stdin → input()  ┐
-                 ├──→  main.py loop  ──→  Player.drop_set / can_extend_set
-deck.py          │                         │
-helpers.py       │                         ▼
-                 │                       Table state (mutated in place)
-print()  ←───────┘                         │
-                                           ▼
-                                       stdout via color-coded print()
+input_fn ──▶  cli.loop.run()
+                   │
+                   ▼
+              _do_draw_phase / _do_play_phase / _do_discard
+                   │                       ▲
+                   │ Action                │ (state', events)
+                   ▼                       │
+              engine.apply(state, action) ─┘
+                   │
+                   │ events
+                   ▼
+              cli.render.format_events / _hand / _table / _score / _error
+                   │
+                   ▼
+              output_fn
 ```
 
-Rule checks live inside the input-validation loop; there is no pure boundary.
+All rule logic lives inside `engine.apply`; the CLI only parses input, dispatches actions, and renders events. Both `input_fn` and `output_fn` are injected, so tests drive `run()` with scripted input lists and no stdin monkeypatching.
 
 ### 6.2 Target (web)
 
@@ -414,12 +428,9 @@ Each browser's UI state is a pure function of the events it has received. Replay
 
 ```
 tests/
-├── test_deck.py, test_helpers.py   legacy — verbatim unittest, flat-module imports
-├── test_smoke.py                   import-time regression guard
-└── domain/
-    ├── test_cards.py               hypothesis + deterministic on Card/Deck
-    ├── test_rules.py               deterministic rule specs (+ xfail for Phase 2)
-    └── test_scoring.py             scoring tiers (+ xfail for 1000-pt edge)
+├── domain/                         deterministic + hypothesis rule tests
+├── engine/                         scenario tests over (initial_state, action_log) → final_state
+└── cli/                            adapter tests: parsers, renderers, scripted run() playthroughs
 ```
 
 ### 7.2 Test kinds
@@ -428,10 +439,9 @@ tests/
 |---|---|---|---|
 | Unit (deterministic) | `tests/domain/` | pytest | Pin specific rule outputs |
 | Property | `tests/domain/test_cards.py` | hypothesis | Card invariants (ordering symmetry, etc.) |
-| Smoke | `tests/test_smoke.py` | pytest | Import-time guard across refactors |
-| Scenario (engine) | **Phase 2** | pytest | `(initial_state, action_log) → final_state` |
+| Scenario (engine) | `tests/engine/` | pytest | `(initial_state, action_log) → final_state` |
+| CLI adapter | `tests/cli/` | pytest | Scripted `input_fn` lists drive `run()` end-to-end |
 | Integration (WS) | **Phase 4** | pytest-asyncio + TestClient | Full room flows |
-| Legacy regression | `test_deck.py`, `test_helpers.py` | unittest | Existing coverage |
 
 ### 7.3 `xfail` as spec
 
@@ -444,11 +454,11 @@ The Phase 2 to-do list was encoded as 5 `@pytest.mark.xfail(strict=True)` tests 
 | 0 | 0 (permissive baseline) | ✅ shipped |
 | 1 | 0 (still permissive) | ✅ shipped at 64% actual |
 | 2 | 80 | ✅ shipped at 82% actual (Phase 2b) |
-| 3 | 85 | CLI thin; everything but the interactive wiring |
+| 3 | 85 | ✅ shipped at 92% actual (Phase 3) |
 | 4 | 85 | HTTP + WS handlers excluded via pragma where appropriate |
 | 5+ | 90 | Persistence + full stack |
 
-Current coverage: **82%** (domain + engine both >80%; legacy `player.py`/`table.py`/`main.py` remain at 0% — they'll be deleted in Phase 3).
+Current coverage: **92%** against `canastra/` (domain + engine + cli).
 
 ---
 
@@ -474,7 +484,7 @@ make ci             # lint + typecheck + tests locally
 Three parallel jobs on every push/PR to `main`:
 
 1. **lint** — `ruff check .` + `ruff format --check .`
-2. **typecheck** — `mypy` (strict on `canastra.domain.*`, lenient on legacy flat modules)
+2. **typecheck** — `mypy canastra` (strict on `canastra.domain.*`)
 3. **test** — `pytest` on matrix `[py3.11, py3.12]`, uploads `coverage.xml` as artifact
 
 TODO comments in `ci.yml` sketch the Phase 4 (API integration + Postgres service) and Phase 4+ (Docker build + push on tag) jobs — add them when their layers land.
@@ -497,10 +507,9 @@ TODO comments in `ci.yml` sketch the Phase 4 (API integration + Postgres service
 
 - **`Card.__eq__` ignores deck identity.** Intended for multi-deck play; `hand.remove(card)` picks the first structural match. Do not "fix" this without auditing every `.remove` call site.
 - **`rank` is polymorphic (`str | int`).** `rank_order[rank]` works either way because the dict has both kinds of keys. Printing uses whatever type got constructed.
-- **Teams in the legacy `Table` are assigned by `i % 2`.** Do not reorder `players` without updating `table.py` and `main.py` together.
-- **`main.py` is module-scope code, not a function.** Importing it will immediately prompt for player names. Do not import it from tests or other modules until Phase 3.
-- **`conftest.py` sys.path shim.** Needed today so `from deck import ...` works under pytest's `--import-mode=importlib`. Delete in Phase 3 once every caller imports from `canastra.*`.
-- **`points_from_set` is a legacy alias.** `main.py:320,328` still uses the misspelled name. Do not rename `points_for_set` without also dropping the alias and updating callers.
+- **CLI I/O is routed through injected `input_fn`/`output_fn` callables.** Never call `input()` or `print()` directly from new code in `canastra.cli`; pass the callables through so tests can script input lists without monkeypatching stdin/stdout.
+- **`GameState` is a frozen pydantic model.** Mutate via `state.model_copy(update={...})` — direct attribute assignment will raise.
+- **`CANASTRA_SEED` env var overrides the random seed** in `canastra.cli.setup.build_config_interactive`. Handy for reproducing a deal during manual testing; leave unset for production runs.
 
 ---
 
@@ -511,7 +520,7 @@ TODO comments in `ci.yml` sketch the Phase 4 (API integration + Postgres service
 | 0 | Test infra — rename dotted files, add pytest, tests/ dir, smoke test | ✅ 2026-04-17 | `pytest` runs + 10 tests pass |
 | 1 | Extract pure domain → `canastra/domain/`, add property tests, xfail Phase 2 specs | ✅ 2026-04-18 | `canastra.domain.*` clean under ruff + mypy strict; 44 pass / 5 xfail |
 | 2 | Game engine state machine. Fix the 5 xfails. Implement wild-reinterpret, permanent-dirty, end-of-game scoring algorithm, timer rule, chin semantics | ✅ 2026-04-22 | `(state, action) → (state', events)` for a full game; chin + deck-exhaust + timer scenarios green |
-| 3 | Rewrite `main.py` as thin CLI adapter over engine; delete legacy shims + `Player`/`Table` + `conftest.py`. Game loop becomes a function. | ⏳ | `python -m canastra` plays end-to-end; no module-scope I/O |
+| 3 | Thin CLI adapter over engine (`python -m canastra`); delete legacy flat modules. | ✅ 2026-04-23 | `python -m canastra` plays end-to-end; no module-scope I/O; 196 tests / 92% coverage |
 | 4 | FastAPI HTTP + WebSockets. RoomManager, auth (magic link), private hand broadcasting, reconnect via snapshot replay. | ⏳ | Two browser tabs play a full game over WS |
 | 5 | Postgres persistence: users, games, append-only `action_log`, periodic `snapshots`. | ⏳ | Server restart mid-game → clients reconnect and resume |
 | 6 | Frontend (web client). Event-stream-driven UI. | ⏳ | Family plays a real game |

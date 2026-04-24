@@ -4,36 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Terminal-based Python implementation of Canastra (the author's family variant — no jokers, no freeze, no black/red threes). Rule nuances are documented in `README.md` and should be consulted before changing scoring or set-validation logic.
+Terminal-based Python implementation of Canastra (the author's family variant — no jokers, no freeze, no black/red threes). Rule nuances are documented in `README.md` and `ARCHITECTURE.md` and should be consulted before changing scoring or set-validation logic.
 
 ## Commands
 
 ```bash
 source venv/bin/activate
 uv pip install -r requirements.txt -r requirements-dev.txt   # runtime + dev deps
-python main.py                                               # run the game (prompts for player names)
+python -m canastra                                           # run the game (prompts for player names)
+CANASTRA_SEED=42 python -m canastra                          # reproducible shuffle for debugging
 pytest                                                       # full suite + coverage (config in pyproject.toml)
-pytest tests/test_helpers.py                                 # single file
-pytest tests/test_helpers.py::TestHelpers::test_is_clean     # single test
+pytest tests/cli -v                                          # just the CLI-layer tests
+pytest tests/engine/test_apply.py::test_draw_from_deck       # single test
 make ci                                                      # lint + typecheck + test locally
 ```
 
-Tests live under `tests/` as of Phase 0 of the refactor. `conftest.py` at the repo root inserts the root on `sys.path` so tests can still `from deck import ...` against the flat-layout modules; delete it once Phase 1 ships `canastra/` as a proper package.
+Tests live under `tests/` organized by layer: `tests/domain/`, `tests/engine/`, `tests/cli/`. Coverage floor is 85% across `canastra/`.
 
 ## Architecture
 
-Four modules plus a top-level game loop. Data flows one way: `main.py` drives input → mutates `Player` and `Table` state → delegates rule checks to `helpers.py`.
+Three-layer stack, each layer depending only on the layer below it:
 
-- **`deck.py`** — `Card` and `Deck`. `Card` defines ordering via `(suit_order, rank_order)`, so `sorted(hand)` groups by suit then rank. `Deck._deal_new_hands(n)` pops 11 cards × n into separate lists — used for both initial hands and the reserve "new hands" (mortos).
-- **`player.py`** — `Player` owns a hand and per-turn `played` flag. `_is_play_valid` enforces suit/wildcard rules; `drop_set` / `can_extend_set` mutate the team's sets on the `Table`. `chin` handles the "hand empty" branch: pulls a new hand from `game.new_hands` or ends the game if the team already used both.
-- **`table.py`** — `Table` is the game state: two teams (assembled by splitting `players` on even/odd index), per-team sets (`{suit: [set, set, ...]}`), per-team hand count, trash, deck, reserve hands. `_get_team_set(player)` is the canonical way to reach a player's team's sets.
-- **`helpers.py`** — Pure functions for rule logic. Wildcard = rank `2`. `is_in_order` is the trickiest: it handles `2` as a positional wild and toggles `high_ace` based on whether the run ends at King/Queen. `is_clean` requires length ≥ 7 and at most one `2`, only in the "twos" position (i.e. natural run or `A,2,3,...`). `points_for_set` returns 1000/500/200/100 by canastra type.
-- **`main.py`** — Not a function; the file is the game loop at module scope. Three-phase turn (draw → play loop → discard), with team color-coding (yellow = team1, blue = team2). After `game.game_over`, the post-game block subtracts remaining-hand cards from the table and tallies points.
+```
+canastra/cli/     →  canastra/engine/  →  canastra/domain/
+(interactive)       (state machine)      (pure rules)
+```
+
+- **`canastra/domain/`** — Pure rules. `cards.py` defines `Card`, `Deck`, and suit glyphs. `rules.py` owns wildcard semantics (`is_in_order`, `is_clean`, `extends_set`, `is_permanent_dirty`). `scoring.py` has `points_for_set`. No I/O, no state, mypy-strict.
+- **`canastra/engine/`** — Deterministic state machine. `GameState` / `GameConfig` / `Meld` / `Phase` / `TurnState` are frozen pydantic v2 models. `apply(state, action) → (state', events)` is the pure transition function — everything else is helpers, validators, or the forced-discard timer ladder. Seeded shuffle makes `(seed, action_log) → replay` exact.
+- **`canastra/cli/`** — Thin interactive adapter. `loop.run()` builds a `GameConfig` via `setup.build_config_interactive`, then dispatches on `state.current_turn.phase` through `_do_draw_phase` / `_do_play_phase` / `_do_discard`. All I/O is routed through injected `input_fn` / `output_fn` callables, so tests script input lists without touching stdin. Render functions (`format_hand`, `format_table`, `format_events`, `format_score`, `format_error`) are pure string builders.
+- **`canastra/__main__.py`** — Five-line entry point: `raise SystemExit(run())`.
 
 ## Conventions and gotchas
 
-- Teams are assigned by index parity in `Table.__init__` — reordering `players` changes team composition. `main.py` also uses `i % 2` for the turn-color heuristic, which assumes that ordering.
-- Suits are unicode glyphs (`♥ ♦ ♣ ♠`) defined at the top of `deck.py`, `player.py`, and `tests/test_helpers.py`. Keep them consistent if adding files.
+- Teams are assigned by seat parity in `initial_state` — reordering `seat_order` changes team composition. Render functions use `{0: Fore.yellow, 1: Fore.blue}` for the two teams.
+- Suits are unicode glyphs (`♥ ♦ ♣ ♠`) defined in `canastra/domain/cards.py`. Keep them consistent if adding files.
 - `Card.__eq__` compares by `(suit, rank)` only, so duplicates across decks compare equal — `hand.remove(card)` removes the first match, which is the intended behavior for multi-deck play.
-- Rank `2` is a wildcard everywhere except when it appears in the "twos" slot of a natural run. Touch `is_in_order` / `is_clean` / `extends_set` together when changing wildcard semantics — the test suite covers the tricky Ace-high/Ace-low and joker-in-middle cases.
-- `README.md` lists the roadmap (API + frontend). Current code is strictly terminal/backend; there is no web layer yet.
+- Rank `2` is a wildcard everywhere except when it appears in the "twos" slot of a natural run. Touch `is_in_order` / `is_clean` / `extends_set` together when changing wildcard semantics — the domain test suite covers the tricky Ace-high/Ace-low and joker-in-middle cases.
+- `GameState` is frozen; use `state.model_copy(update={...})` to derive a new state. The engine never mutates — every `apply` returns a fresh state.
+- Engine actions raise `ActionRejected(str)` on illegal moves; CLI helpers catch and re-prompt. Do not let engine errors escape into the loop.
+- `CANASTRA_SEED` env var overrides the random seed in `setup.build_config_interactive` — useful for reproducible debugging and scripted integration tests.
+- `README.md` lists the roadmap (FastAPI + web frontend). Phase 3 shipped the CLI adapter; Phase 4 will introduce a WebSocket layer that swaps `input_fn`/`output_fn` for network I/O while the engine stays identical.

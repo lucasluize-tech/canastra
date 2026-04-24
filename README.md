@@ -29,7 +29,7 @@ A terminal Canastra game built around a deterministic, replayable game engine. I
 ## Demo
 
 ```
-$ python main.py
+$ python -m canastra
 Number of players (must be even, >= 4): 4
 Number of decks (>= 2): 2
 Reserve hands per team (2 to num_decks): 2
@@ -76,10 +76,16 @@ uv pip install -r requirements.txt -r requirements-dev.txt
 ### Run the game
 
 ```shell
-python main.py
+python -m canastra
 ```
 
 The CLI prompts for the number of players, decks, reserve hands per team, and player names — then drops you into the turn loop.
+
+For reproducible games (useful for debugging or playtesting a specific shuffle), set the `CANASTRA_SEED` environment variable:
+
+```shell
+CANASTRA_SEED=42 python -m canastra
+```
 
 ## Usage
 
@@ -126,19 +132,24 @@ mypy canastra/      # type check
 ```
 canastra/
 ├── canastra/
+│   ├── __main__.py         # python -m canastra entry point
 │   ├── domain/             # Pure rules — no I/O, no state
 │   │   ├── cards.py        # Card, Deck, Suit constants
 │   │   ├── rules.py        # is_in_order, is_clean, extends_set, is_permanent_dirty
 │   │   └── scoring.py      # points_for_set
-│   └── engine/             # Deterministic state machine
-│       ├── state.py        # GameConfig, GameState, Meld, Phase, TurnState (pydantic)
-│       ├── actions.py      # Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin
-│       ├── events.py       # CardDrawn, MeldCreated, ..., GameEnded
-│       ├── engine.py       # apply(state, action) → (state', events)
-│       ├── scoring.py      # End-of-game card-removal optimizer
-│       └── timer.py        # Forced-discard priority ladder
-├── main.py                 # Terminal game loop (Phase 3: → CLI adapter over engine)
-├── tests/                  # 118 tests, 82% coverage
+│   ├── engine/             # Deterministic state machine
+│   │   ├── state.py        # GameConfig, GameState, Meld, Phase, TurnState (pydantic)
+│   │   ├── actions.py      # Draw, PickUpTrash, CreateMeld, ExtendMeld, Discard, Chin
+│   │   ├── events.py       # CardDrawn, MeldCreated, ..., GameEnded
+│   │   ├── engine.py       # apply(state, action) → (state', events)
+│   │   ├── scoring.py      # End-of-game card-removal optimizer
+│   │   └── timer.py        # Forced-discard priority ladder
+│   └── cli/                # Thin interactive adapter over the engine
+│       ├── setup.py        # build_config_interactive (env-seed aware)
+│       ├── prompts.py      # BadInput + pure parsers + ask_* reprompt wrappers
+│       ├── render.py       # format_hand / format_table / format_events / format_score
+│       └── loop.py         # run(), _do_draw_phase, _do_play_phase, _do_discard
+├── tests/                  # 196 tests, 92% coverage (domain + engine + cli)
 ├── ARCHITECTURE.md         # Structural reference + phase status
 └── pyproject.toml
 ```
@@ -152,8 +163,8 @@ This project is being incrementally refactored into a web-multiplayer game. Phas
 | 0 | Test infrastructure | ✅ shipped |
 | 1 | Pure domain package extraction | ✅ shipped |
 | 2 | Game engine state machine | ✅ shipped |
-| 3 | Rewire `main.py` as CLI adapter; delete legacy shims | ⏳ next |
-| 4 | FastAPI HTTP + WebSocket multiplayer | ⏳ |
+| 3 | Thin CLI adapter (`python -m canastra`); legacy shims deleted | ✅ shipped |
+| 4 | FastAPI HTTP + WebSocket multiplayer | ⏳ next |
 | 5 | Postgres persistence (action log + snapshots) | ⏳ |
 | 6 | Web frontend | ⏳ |
 
