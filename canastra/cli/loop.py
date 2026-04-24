@@ -128,7 +128,7 @@ def _do_draw_phase(
         except ActionRejected as e:
             output_fn(format_error(str(e)))
             continue
-        for line in format_events(events, names):
+        for line in format_events(events, names, state=new_state):
             output_fn(line)
         return new_state, events
 
@@ -212,7 +212,7 @@ def _do_play_phase(
             output_fn(format_error(str(e)))
             continue
 
-        for line in format_events(events, names):
+        for line in format_events(events, names, state=new_state):
             output_fn(line)
         return new_state, events, "meld"
 
@@ -273,6 +273,6 @@ def _do_discard(
         except ActionRejected as e:
             output_fn(format_error(str(e)))
             continue
-        for line in format_events(events, names):
+        for line in format_events(events, names, state=new_state):
             output_fn(line)
         return new_state, events

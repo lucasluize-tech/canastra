@@ -111,6 +111,31 @@ class TestFormatEvents:
         out = _strip_ansi(format_events([ev], _NAMES)[0])
         assert "extend" in out.lower()
 
+    def test_meld_extended_with_state_shows_full_meld(self) -> None:
+        from canastra.engine import GameConfig, Meld, initial_state
+
+        config = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=1)
+        base = initial_state(config)
+        # Drop a fully-extended meld into the state under the same meld_id the
+        # event references; the renderer must pick it up and append the full run.
+        extended_meld = Meld(
+            id=_MELD_ID,
+            cards=[Card("♥", 7), Card("♥", 8), Card("♥", 9), Card("♥", 10)],
+        )
+        state = base.model_copy(update={"melds": {0: [extended_meld], 1: []}})
+        ev = MeldExtended(
+            player_id=0,
+            team_id=0,
+            meld_id=_MELD_ID,
+            added=[Card("♥", 10)],
+        )
+        out = _strip_ansi(format_events([ev], _NAMES, state=state)[0])
+        # Added card AND every existing meld card must appear after the arrow.
+        arrow_pos = out.index("->")
+        tail = out[arrow_pos:]
+        for rank_glyph in ("7♥", "8♥", "9♥", "10♥"):
+            assert rank_glyph in tail
+
     def test_discarded(self) -> None:
         ev = Discarded(player_id=3, card=Card("♠", "King"))
         out = _strip_ansi(format_events([ev], _NAMES)[0])

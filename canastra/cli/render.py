@@ -76,22 +76,30 @@ def format_hand(hand: list[Card]) -> str:
     return "\n".join(lines)
 
 
-def format_events(events: list[Event], names: list[str]) -> list[str]:
+def format_events(
+    events: list[Event],
+    names: list[str],
+    *,
+    state: GameState | None = None,
+) -> list[str]:
     """Render a list of engine Events as human-readable lines.
 
     Silent events (currently just TurnAdvanced) return no line. The
     next turn's header announces the new player, so double-printing
     would be noise.
+
+    If `state` (the *post-apply* state) is provided, MeldExtended lines
+    also include the full resulting meld, not just the added cards.
     """
     lines: list[str] = []
     for ev in events:
-        line = _format_one(ev, names)
+        line = _format_one(ev, names, state)
         if line is not None:
             lines.append(line)
     return lines
 
 
-def _format_one(ev: Event, names: list[str]) -> str | None:
+def _format_one(ev: Event, names: list[str], state: GameState | None = None) -> str | None:
     if isinstance(ev, CardDrawn):
         name = names[ev.player_id]
         return f"  {name} drew {ev.card} from the deck"
@@ -110,9 +118,15 @@ def _format_one(ev: Event, names: list[str]) -> str | None:
         color = _team_color(ev.team_id)
         name = names[ev.player_id]
         added = _cards_inline(ev.added)
+        full_suffix = ""
+        if state is not None:
+            for m in state.melds.get(ev.team_id, []):
+                if m.id == ev.meld_id:
+                    full_suffix = f" -> {_cards_inline(list(m.cards))}"
+                    break
         return (
             f"  {color}{name} (Team {ev.team_id}) "
-            f"extended meld {_meld_short(ev.meld_id)} with: {added}{_RESET}"
+            f"extended meld {_meld_short(ev.meld_id)} with {added}{full_suffix}{_RESET}"
         )
     if isinstance(ev, Discarded):
         name = names[ev.player_id]
