@@ -36,7 +36,10 @@ def _do_draw_phase(
     input_fn: Callable[[str], str],
     output_fn: Callable[[str], None],
 ) -> tuple[GameState, list[Event]]:
-    """Ask 'd/t' and apply Draw or PickUpTrash. Reprompt on rejection."""
+    """Ask 'd/t' and apply Draw or PickUpTrash. Reprompt on rejection.
+
+    Precondition: state.current_turn.phase == Phase.WAITING_DRAW.
+    """
     pid = state.current_turn.player_id
     while True:
         choice = ask_choice(
