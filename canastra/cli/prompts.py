@@ -13,6 +13,9 @@ legal.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypeVar
+
+_T = TypeVar("_T")
 
 
 class BadInput(Exception):
@@ -74,10 +77,10 @@ def parse_int_in_range(raw: str, lo: int, hi: int) -> int:
 
 def _reprompt_loop(
     prompt: str,
-    parse: Callable[[str], object],
+    parse: Callable[[str], _T],
     input_fn: Callable[[str], str],
     output_fn: Callable[[str], None],
-) -> object:
+) -> _T:
     """Common reprompt loop: call input_fn, parse, print error on BadInput."""
     while True:
         raw = input_fn(prompt)
@@ -94,7 +97,7 @@ def ask_choice(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> str:
-    return _reprompt_loop(prompt, lambda raw: parse_choice(raw, options), input_fn, output_fn)  # type: ignore[return-value]
+    return _reprompt_loop(prompt, lambda raw: parse_choice(raw, options), input_fn, output_fn)
 
 
 def ask_yes_no(
@@ -103,7 +106,7 @@ def ask_yes_no(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> bool:
-    return _reprompt_loop(prompt, parse_yes_no, input_fn, output_fn)  # type: ignore[return-value]
+    return _reprompt_loop(prompt, parse_yes_no, input_fn, output_fn)
 
 
 def ask_int_in_range(
@@ -114,7 +117,7 @@ def ask_int_in_range(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> int:
-    return _reprompt_loop(prompt, lambda raw: parse_int_in_range(raw, lo, hi), input_fn, output_fn)  # type: ignore[return-value]
+    return _reprompt_loop(prompt, lambda raw: parse_int_in_range(raw, lo, hi), input_fn, output_fn)
 
 
 def ask_card_indices(
@@ -126,4 +129,4 @@ def ask_card_indices(
 ) -> list[int]:
     return _reprompt_loop(
         prompt, lambda raw: parse_card_indices(raw, hand_size), input_fn, output_fn
-    )  # type: ignore[return-value]
+    )
