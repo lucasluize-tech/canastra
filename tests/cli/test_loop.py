@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from canastra.cli.loop import _do_draw_phase, _do_play_phase
+from canastra.cli.loop import _do_discard, _do_draw_phase, _do_play_phase
 from canastra.domain.cards import Card
 from canastra.engine import (
     CardDrawn,
+    Discarded,
     Draw,
     GameConfig,
     MeldCreated,
@@ -179,3 +180,48 @@ class TestDoPlayPhase:
             )
             or len([o for o in outputs if "\x1b" in o]) >= 1
         )
+
+
+class TestDoDiscard:
+    def test_discard_happy(self) -> None:
+        state = _state_in_playing()
+        outputs: list[str] = []
+
+        new_state, events = _do_discard(
+            state,
+            names=_NAMES,
+            input_fn=_scripted([
+                "1",
+                "y",
+            ]),
+            output_fn=outputs.append,
+        )
+
+        assert any(isinstance(e, Discarded) for e in events)
+        assert len(new_state.hands[0]) == len(state.hands[0]) - 1
+        assert len(new_state.trash) == 1
+
+    def test_cancel_discard_returns_none(self) -> None:
+        state = _state_in_playing()
+        outputs: list[str] = []
+
+        result = _do_discard(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["1", "n"]),
+            output_fn=outputs.append,
+        )
+
+        assert result is None
+
+    def test_reprompts_on_bad_index(self) -> None:
+        state = _state_in_playing()
+        outputs: list[str] = []
+
+        new_state, events = _do_discard(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["0", "99", "1", "y"]),
+            output_fn=outputs.append,
+        )
+        assert any(isinstance(e, Discarded) for e in events)

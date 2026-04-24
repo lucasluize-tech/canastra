@@ -9,11 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from canastra.cli.prompts import BadInput, ask_choice, ask_int_in_range, parse_card_indices
+from canastra.cli.prompts import (
+    BadInput,
+    ask_choice,
+    ask_int_in_range,
+    ask_yes_no,
+    parse_card_indices,
+)
 from canastra.cli.render import format_error, format_events, format_hand
 from canastra.engine import (
     ActionRejected,
     CreateMeld,
+    Discard,
     Draw,
     Event,
     ExtendMeld,
@@ -146,3 +153,50 @@ def _meld_line_for_listing(m: Meld) -> str:
     flag = " [dirty]" if m.permanent_dirty else ""
     short = str(m.id)[:6]
     return f"{cards}  (id: {short}){flag}"
+
+
+def _do_discard(
+    state: GameState,
+    *,
+    names: list[str],
+    input_fn: Callable[[str], str],
+    output_fn: Callable[[str], None],
+) -> tuple[GameState, list[Event]] | None:
+    """Discard sub-flow.
+
+    Returns (new_state, events) on successful discard, or None if the
+    player cancels at the confirmation step. Caller should drop back
+    into the play loop on None.
+
+    Precondition: state.current_turn.phase == Phase.PLAYING (or the
+    engine's designated discard phase — apply() will reject otherwise).
+    """
+    pid = state.current_turn.player_id
+    hand = state.hands[pid]
+    output_fn(format_hand(hand))
+
+    while True:
+        idx = ask_int_in_range(
+            "Which card to discard? ",
+            lo=1,
+            hi=len(hand),
+            input_fn=input_fn,
+            output_fn=output_fn,
+        )
+        card = hand[idx - 1]
+        if not ask_yes_no(
+            f"Discard {card}? (y/n): ",
+            input_fn=input_fn,
+            output_fn=output_fn,
+        ):
+            return None
+        try:
+            new_state, events = apply(
+                state, Discard(player_id=pid, card=card)
+            )
+        except ActionRejected as e:
+            output_fn(format_error(str(e)))
+            continue
+        for line in format_events(events, names):
+            output_fn(line)
+        return new_state, events
