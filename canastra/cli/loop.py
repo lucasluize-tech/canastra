@@ -24,6 +24,7 @@ from canastra.cli.render import (
     format_table,
 )
 from canastra.cli.setup import build_config_interactive
+from canastra.domain.rules import extends_set
 from canastra.engine import (
     ActionRejected,
     CreateMeld,
@@ -165,33 +166,44 @@ def _do_play_phase(
             continue
 
         cards = [hand[i - 1] for i in indices]
-
-        target = ask_choice(
-            "New set or extend existing? (n/e): ",
-            {"n", "e"},
-            input_fn=input_fn,
-            output_fn=output_fn,
-        )
-
         team_id = _team_for(state, pid)
+        team_melds = state.melds.get(team_id, [])
+
+        # Fewer than 3 cards can only be an extension (no new meld is that small).
+        # Skip the n/e prompt in that case.
+        if len(cards) < 3:
+            target = "e"
+        else:
+            target = ask_choice(
+                "New set or extend existing? (n/e): ",
+                {"n", "e"},
+                input_fn=input_fn,
+                output_fn=output_fn,
+            )
+
         action: CreateMeld | ExtendMeld
         if target == "n":
             action = CreateMeld(player_id=pid, cards=cards)
         else:
-            team_melds = state.melds.get(team_id, [])
-            if not team_melds:
-                output_fn(format_error("no existing melds to extend"))
+            extendable = [m for m in team_melds if extends_set(list(m.cards), cards)]
+            if not extendable:
+                output_fn(format_error("no existing meld can accept these cards"))
                 continue
-            for i, m in enumerate(team_melds):
-                output_fn(f"  [{i}] {_meld_line_for_listing(m)}")
-            idx = ask_int_in_range(
-                "Which meld (index)? ",
-                lo=0,
-                hi=len(team_melds) - 1,
-                input_fn=input_fn,
-                output_fn=output_fn,
-            )
-            meld_id = team_melds[idx].id
+            if len(extendable) == 1:
+                meld = extendable[0]
+                output_fn(f"  auto-selected: {_meld_line_for_listing(meld)}")
+                meld_id = meld.id
+            else:
+                for i, m in enumerate(extendable):
+                    output_fn(f"  [{i}] {_meld_line_for_listing(m)}")
+                idx = ask_int_in_range(
+                    "Which meld (index)? ",
+                    lo=0,
+                    hi=len(extendable) - 1,
+                    input_fn=input_fn,
+                    output_fn=output_fn,
+                )
+                meld_id = extendable[idx].id
             action = ExtendMeld(player_id=pid, meld_id=meld_id, cards=cards)
 
         try:

@@ -192,6 +192,53 @@ class TestDoPlayPhase:
             or len([o for o in outputs if "\x1b" in o]) >= 1
         )
 
+    def test_single_card_extend_skips_prompt_and_auto_selects(self) -> None:
+        """Picking 1 card must skip the n/e prompt AND auto-pick the only
+        extendable meld, so the flow is just: indices -> engine applies."""
+        from canastra.engine import MeldExtended
+
+        state = _state_in_playing()
+        # Deterministic 12-card hand (post-Draw) to avoid coupling to shuffle.
+        # Sorted: 6♣, J♣, Q♣, K♣, 4♦, 7♥, 8♥, 9♥, 10♥, 2♠, 5♠, 6♠
+        hand = [
+            Card("♣", 6),
+            Card("♣", "Jack"),
+            Card("♣", "Queen"),
+            Card("♣", "King"),
+            Card("♦", 4),
+            Card("♥", 7),
+            Card("♥", 8),
+            Card("♥", 9),
+            Card("♥", 10),
+            Card("♠", 2),
+            Card("♠", 5),
+            Card("♠", 6),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+
+        # First create a heart meld (♥7,8,9) via 3-card create path.
+        state, _, _ = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["6,7,8", "n"]),  # sorted indices for ♥7, ♥8, ♥9
+            output_fn=lambda _: None,
+        )
+
+        # Post-meld sorted hand (9 cards):
+        # 1. 6♣, 2. J♣, 3. Q♣, 4. K♣, 5. 4♦, 6. 10♥, 7. 2♠, 8. 5♠, 9. 6♠
+        # Extend with ♥10 — single card, no n/e prompt, no meld-pick prompt.
+        outputs: list[str] = []
+        state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["6"]),
+            output_fn=outputs.append,
+        )
+        assert kind == "meld"
+        assert any(isinstance(e, MeldExtended) for e in events)
+        # The auto-selected hint was printed (reduces clutter, confirms target).
+        assert any("auto-selected" in o for o in outputs)
+
 
 class TestDoDiscard:
     def test_discard_happy(self) -> None:
