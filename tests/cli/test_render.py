@@ -5,19 +5,28 @@ from __future__ import annotations
 import re
 from uuid import UUID
 
-from canastra.cli.render import format_error, format_events, format_hand
+from canastra.cli.render import (
+    format_error,
+    format_events,
+    format_hand,
+    format_score,
+    format_table,
+)
 from canastra.domain.cards import Card
 from canastra.engine import (
     CardDrawn,
     Chinned,
     DeckReplenished,
     Discarded,
+    GameConfig,
     GameEnded,
     MeldCreated,
     MeldExtended,
     ReserveTaken,
+    ScoreBreakdown,
     TrashPickedUp,
     TurnAdvanced,
+    initial_state,
 )
 
 
@@ -144,3 +153,103 @@ class TestFormatEvents:
         # Discarded produces a line, TurnAdvanced does not.
         assert len(lines) == 1
         assert "Ana" in _strip_ansi(lines[0])
+
+
+def test_format_table_happy() -> None:
+    config = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+    state = initial_state(config)
+    out = _strip_ansi(format_table(state, viewing_player_id=0, names=_NAMES))
+    assert "Ana" in out  # current player
+    assert "Team 0" in out and "Team 1" in out
+    assert "deck" in out.lower() or "cards" in out.lower()
+    assert "trash" in out.lower()
+
+
+def test_format_table_shows_trash_top() -> None:
+    config = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+    state = initial_state(config)
+    state = state.model_copy(update={"trash": [Card("♠", "King")]})
+    out = _strip_ansi(format_table(state, viewing_player_id=0, names=_NAMES))
+    assert "King" in out
+
+
+def test_format_table_lists_melds_by_team() -> None:
+    from canastra.engine import Meld
+
+    config = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+    state = initial_state(config)
+    meld = Meld(cards=[Card("♥", 7), Card("♥", 8), Card("♥", 9)])
+    state = state.model_copy(update={"melds": {0: [meld], 1: []}})
+    out = _strip_ansi(format_table(state, viewing_player_id=0, names=_NAMES))
+    assert "7" in out and "8" in out and "9" in out
+
+
+class TestFormatScore:
+    def test_breakdown_printed_per_team(self) -> None:
+        breakdowns = {
+            0: ScoreBreakdown(
+                leftover_debt=0,
+                canastra_bonus=200,
+                table_points=180,
+                reserve_bonus=100,
+                chin_bonus=100,
+                total=580,
+            ),
+            1: ScoreBreakdown(
+                leftover_debt=-50,
+                canastra_bonus=0,
+                table_points=90,
+                reserve_bonus=0,
+                chin_bonus=0,
+                total=40,
+            ),
+        }
+        out = _strip_ansi(format_score(breakdowns, _NAMES))
+        assert "Team 0" in out and "Team 1" in out
+        assert "580" in out and "40" in out
+        assert "canastra" in out.lower()
+
+    def test_declares_winner(self) -> None:
+        breakdowns = {
+            0: ScoreBreakdown(
+                leftover_debt=0,
+                canastra_bonus=200,
+                table_points=180,
+                reserve_bonus=100,
+                chin_bonus=100,
+                total=580,
+            ),
+            1: ScoreBreakdown(
+                leftover_debt=0,
+                canastra_bonus=0,
+                table_points=40,
+                reserve_bonus=0,
+                chin_bonus=0,
+                total=40,
+            ),
+        }
+        out = _strip_ansi(format_score(breakdowns, _NAMES))
+        assert "Team 0" in out
+        assert "win" in out.lower()
+
+    def test_declares_tie(self) -> None:
+        breakdowns = {
+            0: ScoreBreakdown(
+                leftover_debt=0,
+                canastra_bonus=0,
+                table_points=100,
+                reserve_bonus=0,
+                chin_bonus=0,
+                total=100,
+            ),
+            1: ScoreBreakdown(
+                leftover_debt=0,
+                canastra_bonus=0,
+                table_points=100,
+                reserve_bonus=0,
+                chin_bonus=0,
+                total=100,
+            ),
+        }
+        out = _strip_ansi(format_score(breakdowns, _NAMES))
+        assert "tie" in out.lower() or "tied" in out.lower()

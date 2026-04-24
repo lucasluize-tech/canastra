@@ -24,9 +24,12 @@ from canastra.engine import (
     Discarded,
     Event,
     GameEnded,
+    GameState,
+    Meld,
     MeldCreated,
     MeldExtended,
     ReserveTaken,
+    ScoreBreakdown,
     TrashPickedUp,
     TurnAdvanced,
 )
@@ -125,3 +128,86 @@ def _format_one(ev: Event, names: list[str]) -> str | None:
         scored = ", ".join(f"Team {t}: {s}" for t, s in sorted(ev.scores.items()))
         return f"  Game over. {scored}"
     return f"  (unknown event: {ev!r})"  # pragma: no cover
+
+
+def format_table(state: GameState, viewing_player_id: int, names: list[str]) -> str:
+    """Render the visible table state as a multi-line string.
+
+    Shows: current player + their team, each team's melds, trash top
+    card, deck size, and per-team reserves-used count. Does NOT reveal
+    other players' hands — only the viewing player's is rendered
+    elsewhere via format_hand.
+    """
+    lines: list[str] = []
+    current_pid = state.current_turn.player_id
+    current_team = _team_for(state, current_pid)
+    current_color = _team_color(current_team)
+
+    lines.append("")
+    lines.append(
+        f"{current_color}========= {names[current_pid]} "
+        f"(Team {current_team}) =========={_RESET}"
+    )
+    lines.append(f"  Deck: {len(state.deck)} cards   Trash top: {_trash_top(state)}")
+    lines.append("")
+
+    for team_id in (0, 1):
+        color = _team_color(team_id)
+        melds = state.melds.get(team_id, [])
+        reserves_used = state.reserves_used.get(team_id, 0)
+        reserves_total = state.config.reserves_per_team
+        lines.append(
+            f"  {color}Team {team_id} — melds: {len(melds)}, "
+            f"reserves used: {reserves_used}/{reserves_total}{_RESET}"
+        )
+        for m in melds:
+            lines.append(f"    {_meld_line(m)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _team_for(state: GameState, player_id: int) -> int:
+    for team_id, members in state.teams.items():
+        if player_id in members:
+            return team_id
+    return -1
+
+
+def _trash_top(state: GameState) -> str:
+    return str(state.trash[-1]) if state.trash else "(empty)"
+
+
+def _meld_line(m: Meld) -> str:
+    cards = _cards_inline(m.cards)
+    flag = " [dirty]" if m.permanent_dirty else ""
+    return f"{cards}  (id: {_meld_short(m.id)}){flag}"
+
+
+def format_score(
+    breakdowns: dict[int, ScoreBreakdown],
+    names: list[str],
+) -> str:
+    """Render per-team ScoreBreakdown and declare winner / tie."""
+    lines: list[str] = ["", "============ FINAL SCORE ============"]
+    for team_id in sorted(breakdowns):
+        bd = breakdowns[team_id]
+        color = _team_color(team_id)
+        lines.append(f"{color}Team {team_id}{_RESET}")
+        lines.append(f"  leftover debt:  {bd.leftover_debt}")
+        lines.append(f"  canastra bonus: {bd.canastra_bonus}")
+        lines.append(f"  table points:   {bd.table_points}")
+        lines.append(f"  reserve bonus:  {bd.reserve_bonus}")
+        lines.append(f"  chin bonus:     {bd.chin_bonus}")
+        lines.append(f"  TOTAL:          {bd.total}")
+        lines.append("")
+
+    totals = {tid: bd.total for tid, bd in breakdowns.items()}
+    max_total = max(totals.values())
+    winners = [t for t, s in totals.items() if s == max_total]
+    if len(winners) == 1:
+        w = winners[0]
+        lines.append(f"{_team_color(w)}Team {w} wins with {max_total} points!{_RESET}")
+    else:
+        tied = ", ".join(f"Team {t}" for t in winners)
+        lines.append(f"Tied at {max_total}: {tied}")
+    return "\n".join(lines)
