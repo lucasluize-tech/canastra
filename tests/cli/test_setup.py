@@ -89,3 +89,28 @@ def test_generates_random_seed_when_unset(monkeypatch: pytest.MonkeyPatch) -> No
     )
     assert isinstance(config.seed, int)
     assert 0 <= config.seed < 2**31
+
+
+def test_empty_name_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CANASTRA_SEED", "1")
+    inputs = ["", "", "", "Ana", "", "Carla", "   "]  # players 2 and 4 blank
+    config, names = build_config_interactive(
+        input_fn=_scripted(inputs),
+        output_fn=lambda _: None,
+    )
+    assert config.num_players == 4
+    assert names == ["Ana", "Player2", "Carla", "Player4"]
+
+
+def test_malformed_canastra_seed_warns_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CANASTRA_SEED", "not-a-number")
+    outputs: list[str] = []
+    config, _ = build_config_interactive(
+        input_fn=_scripted(["", "", "", "a", "b", "c", "d"]),
+        output_fn=outputs.append,
+    )
+    assert isinstance(config.seed, int)
+    assert 0 <= config.seed < 2**31
+    assert any("CANASTRA_SEED" in o for o in outputs)
