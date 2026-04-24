@@ -273,6 +273,172 @@ class TestDoPlayPhase:
         # The auto-selected hint was printed (reduces clutter, confirms target).
         assert any("auto-selected" in o for o in outputs)
 
+    def test_multi_extendable_with_single_card_prompts_which_meld_only(self) -> None:
+        """<3 cards + 2+ extendable: skip n/e, prompt only for meld index."""
+        from uuid import UUID
+
+        from canastra.engine import Meld, MeldExtended
+
+        state = _state_in_playing()
+        # Two team melds — a wild ♣2 can slot into either.
+        heart_meld = Meld(
+            id=UUID("11111111-1111-1111-1111-111111111111"),
+            cards=[Card("♥", 3), Card("♥", 4), Card("♥", 5)],
+        )
+        spade_meld = Meld(
+            id=UUID("22222222-2222-2222-2222-222222222222"),
+            cards=[Card("♠", 8), Card("♠", 9), Card("♠", 10)],
+        )
+        state = state.model_copy(update={"melds": {0: [heart_meld, spade_meld], 1: []}})
+        hand = [
+            Card("♣", 2),  # wild — can extend either meld
+            Card("♦", 3),
+            Card("♦", 4),
+            Card("♦", 5),
+            Card("♥", 6),
+            Card("♥", 7),
+            Card("♣", "Jack"),
+            Card("♣", "Queen"),
+            Card("♦", "King"),
+            Card("♠", "Jack"),
+            Card("♠", "Queen"),
+            Card("♠", "King"),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+        # Sorted: 1.♣2  2.♣J  3.♣Q  4.♦3  5.♦4  6.♦5  7.♦K  8.♥6  9.♥7  10.♠J  11.♠Q  12.♠K
+        outputs: list[str] = []
+        # Script: card index for ♣2 (1), then meld index 0.
+        # No n/e prompt expected — only the "Which meld (index)?" prompt.
+        new_state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["1", "0"]),
+            output_fn=outputs.append,
+        )
+
+        assert kind == "meld"
+        ext_events = [e for e in events if isinstance(e, MeldExtended)]
+        assert len(ext_events) == 1
+        assert ext_events[0].meld_id == heart_meld.id
+        # Two meld-listing lines printed (one per extendable meld).
+        listing = [o for o in outputs if o.startswith("  [0]") or o.startswith("  [1]")]
+        assert len(listing) == 2
+
+    def test_less_than_3_no_extendable_errors_and_reprompts(self) -> None:
+        """<3 cards + 0 extendable melds: impossible combination → error + retry."""
+        state = _state_in_playing()
+        # No team melds, so 1 card cannot extend anything AND cannot create.
+        hand = [
+            Card("♥", 7),
+            Card("♥", 8),
+            Card("♥", 9),
+            Card("♠", 5),
+            Card("♠", 6),
+            Card("♦", 4),
+            Card("♦", "Jack"),
+            Card("♣", 2),
+            Card("♣", 10),
+            Card("♥", "Queen"),
+            Card("♠", "Ace"),
+            Card("♦", 3),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+        outputs: list[str] = []
+        # First attempt: 1 card only → impossible → error. Second: 3 valid cards → create.
+        # Sorted indices for ♥7,8,9 = 6,7,8 (same as test_create_meld_happy).
+        new_state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["6", "6,7,8"]),
+            output_fn=outputs.append,
+        )
+        assert kind == "meld"
+        assert any(isinstance(e, MeldCreated) for e in events)
+        assert any("fewer than 3" in o.lower() or "no existing meld" in o.lower() for o in outputs)
+
+    def test_3_plus_single_extendable_user_chooses_new(self) -> None:
+        """≥3 cards + 1 extendable: n/e prompt issued; user picks 'n' → CreateMeld."""
+        from uuid import UUID
+
+        from canastra.engine import Meld
+
+        state = _state_in_playing()
+        # Team has ♠3,4,5 — player's ♠6,7,8 could extend it OR start a new meld.
+        spade_meld = Meld(
+            id=UUID("33333333-3333-3333-3333-333333333333"),
+            cards=[Card("♠", 3), Card("♠", 4), Card("♠", 5)],
+        )
+        state = state.model_copy(update={"melds": {0: [spade_meld], 1: []}})
+        hand = [
+            Card("♠", 6),
+            Card("♠", 7),
+            Card("♠", 8),
+            Card("♦", 3),
+            Card("♦", 4),
+            Card("♦", 5),
+            Card("♣", 10),
+            Card("♣", "Jack"),
+            Card("♣", "Queen"),
+            Card("♥", 10),
+            Card("♥", "Jack"),
+            Card("♥", "Queen"),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+        # Sorted: ♣10, ♣J, ♣Q, ♦3, ♦4, ♦5, ♥10, ♥J, ♥Q, ♠6, ♠7, ♠8
+        outputs: list[str] = []
+        new_state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["10,11,12", "n"]),
+            output_fn=outputs.append,
+        )
+        assert kind == "meld"
+        assert any(isinstance(e, MeldCreated) for e in events)
+        # Team now has 2 melds (original + new).
+        assert len(new_state.melds[0]) == 2
+
+    def test_3_plus_single_extendable_user_chooses_extend_auto_selects(self) -> None:
+        """≥3 cards + 1 extendable: n/e prompt issued; user picks 'e' → auto-select."""
+        from uuid import UUID
+
+        from canastra.engine import Meld, MeldExtended
+
+        state = _state_in_playing()
+        spade_meld = Meld(
+            id=UUID("33333333-3333-3333-3333-333333333333"),
+            cards=[Card("♠", 3), Card("♠", 4), Card("♠", 5)],
+        )
+        state = state.model_copy(update={"melds": {0: [spade_meld], 1: []}})
+        hand = [
+            Card("♠", 6),
+            Card("♠", 7),
+            Card("♠", 8),
+            Card("♦", 3),
+            Card("♦", 4),
+            Card("♦", 5),
+            Card("♣", 10),
+            Card("♣", "Jack"),
+            Card("♣", "Queen"),
+            Card("♥", 10),
+            Card("♥", "Jack"),
+            Card("♥", "Queen"),
+        ]
+        state = state.model_copy(update={"hands": {**state.hands, 0: hand}})
+        outputs: list[str] = []
+        new_state, events, kind = _do_play_phase(
+            state,
+            names=_NAMES,
+            input_fn=_scripted(["10,11,12", "e"]),
+            output_fn=outputs.append,
+        )
+        assert kind == "meld"
+        ext = [e for e in events if isinstance(e, MeldExtended)]
+        assert len(ext) == 1
+        assert ext[0].meld_id == spade_meld.id
+        assert any("auto-selected" in o for o in outputs)
+        # No which-meld listing printed (only 1 extendable).
+        assert not any(o.startswith("  [0]") for o in outputs)
+
 
 class TestDoDiscard:
     def test_discard_happy(self) -> None:
