@@ -65,9 +65,11 @@ def run(
         while state.phase != Phase.ENDED:
             pid = state.current_turn.player_id
             output_fn(format_table(state, viewing_player_id=pid, names=names))
-            output_fn(format_hand(state.hands[pid]))
 
             if state.current_turn.phase == Phase.WAITING_DRAW:
+                # Hand is shown here (pre-draw visibility); the play/discard
+                # helpers reprint it themselves each inner iteration.
+                output_fn(format_hand(state.hands[pid]))
                 state, _ = _do_draw_phase(
                     state, names=names, input_fn=input_fn, output_fn=output_fn
                 )

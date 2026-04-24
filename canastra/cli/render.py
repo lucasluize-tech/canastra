@@ -58,15 +58,20 @@ def format_error(message: str) -> str:
     return f"{_ERROR_ON}  {message}{_RESET}"
 
 
+_HAND_DIVIDER = "──────────────────────────────────────────────────"
+
+
 def format_hand(hand: list[Card]) -> str:
     """Numbered 1-based card list for the active player's hand.
 
     The hand is sorted (by suit, then rank) before rendering so the
     player sees a stable grouped order. Red suits (♥, ♦) are colored;
-    black suits are left in the default terminal color.
+    black suits are left in the default terminal color. Output ends
+    with a thin divider so successive renders stay visually distinct
+    from prompts and event lines that follow.
     """
     if not hand:
-        return "(hand is empty)"
+        return f"(hand is empty)\n{_HAND_DIVIDER}"
     sorted_hand = sorted(hand)
     lines: list[str] = []
     for i, card in enumerate(sorted_hand):
@@ -74,6 +79,7 @@ def format_hand(hand: list[Card]) -> str:
             lines.append(f"  {i + 1:>2}. {Fore.red}{card}{_RESET}")
         else:
             lines.append(f"  {i + 1:>2}. {card}")
+    lines.append(_HAND_DIVIDER)
     return "\n".join(lines)
 
 
