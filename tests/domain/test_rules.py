@@ -8,13 +8,14 @@ to satisfy.
 
 from __future__ import annotations
 
-from canastra.domain.cards import CLUBS, HEARTS, SPADES, Card
+from canastra.domain.cards import CLUBS, DIAMONDS, HEARTS, SPADES, Card
 from canastra.domain.rules import (
     extends_set,
     is_clean,
     is_in_order,
     is_permanent_dirty,
     rank_to_number,
+    run_order,
 )
 
 
@@ -181,3 +182,59 @@ class TestIsPermanentDirty:
     def test_invalid_set_is_not_permanent_dirty(self) -> None:
         cards = [Card(HEARTS, 3), Card(SPADES, 4)]
         assert is_permanent_dirty(cards) is False
+
+
+class TestRunOrder:
+    def test_clean_run_already_in_order(self) -> None:
+        cards = [Card(HEARTS, 3), Card(HEARTS, 4), Card(HEARTS, 5)]
+        assert [str(c) for c in run_order(cards)] == ["3♥", "4♥", "5♥"]
+
+    def test_wild_placed_in_gap_between_non_wilds(self) -> None:
+        # 7, wild, 9, 10 (2♠ acts as rank-8 wildcard here since start=7).
+        cards = [Card(SPADES, 2), Card(SPADES, 7), Card(SPADES, 9), Card(SPADES, 10)]
+        assert [str(c) for c in run_order(cards)] == ["7♠", "2♠", "9♠", "10♠"]
+
+    def test_off_suit_wild_placed_in_gap(self) -> None:
+        cards = [Card(CLUBS, 2), Card(SPADES, 7), Card(SPADES, 9), Card(SPADES, 10)]
+        assert [str(c) for c in run_order(cards)] == ["7♠", "2♣", "9♠", "10♠"]
+
+    def test_natural_two_at_slot_2(self) -> None:
+        # A♥, 2♥(natural), 3♥, 4♥
+        cards = [Card(HEARTS, 3), Card(HEARTS, "Ace"), Card(HEARTS, 2), Card(HEARTS, 4)]
+        assert [str(c) for c in run_order(cards)] == ["A♥", "2♥", "3♥", "4♥"]
+
+    def test_ace_low_for_low_run(self) -> None:
+        cards = [Card(HEARTS, 3), Card(HEARTS, "Ace"), Card(HEARTS, 2), Card(HEARTS, 4)]
+        ordered = run_order(cards)
+        assert str(ordered[0]) == "A♥"  # Ace low
+
+    def test_ace_high_for_high_run(self) -> None:
+        cards = [Card(SPADES, "Queen"), Card(SPADES, "King"), Card(SPADES, "Ace")]
+        assert [str(c) for c in run_order(cards)] == ["Q♠", "K♠", "A♠"]
+
+    def test_wild_extends_upward_edge(self) -> None:
+        # 8, 9, 10, wild => 8, 9, 10, J-position
+        cards = [Card(SPADES, 8), Card(SPADES, 9), Card(SPADES, 10), Card(SPADES, 2)]
+        assert [str(c) for c in run_order(cards)] == ["8♠", "9♠", "10♠", "2♠"]
+
+    def test_two_wilds_fill_gap_and_edge(self) -> None:
+        # 7, wild, 9, 10, wild => 7, 8(wild), 9, 10, J(wild)
+        cards = [
+            Card(SPADES, 7),
+            Card(SPADES, 9),
+            Card(SPADES, 10),
+            Card(CLUBS, 2),
+            Card(DIAMONDS, 2),
+        ]
+        out = [str(c) for c in run_order(cards)]
+        # 7, <wild>, 9, 10, <wild>
+        assert out[0] == "7♠"
+        assert out[2] == "9♠"
+        assert out[3] == "10♠"
+        assert out[1] in ("2♣", "2♦")
+        assert out[4] in ("2♣", "2♦")
+        assert {out[1], out[4]} == {"2♣", "2♦"}
+
+    def test_invalid_set_falls_back_to_rank_sort(self) -> None:
+        cards = [Card(HEARTS, 7), Card(SPADES, 3)]
+        assert len(run_order(cards)) == 2

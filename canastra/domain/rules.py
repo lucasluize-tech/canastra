@@ -124,6 +124,99 @@ def is_in_order(cards: list[Card]) -> bool:
     return _min_wild_count(cards) is not None
 
 
+def run_order(cards: list[Card]) -> list[Card]:
+    """Return cards sorted by run position for display.
+
+    For a valid Canastra run, places non-wilds at their rank slots, an
+    Ace low or high depending on which yields a valid interpretation,
+    a matching-suit 2 at slot 2 if that's the best (min-wild) reading,
+    and wild 2s in whatever gap or edge the canonical interpretation
+    requires. Example: ``{2♠, 7♠, 9♠, 10♠}`` becomes ``[7♠, 2♠, 9♠, 10♠]``
+    because the wild 2 fills slot 8 between 7 and 9.
+
+    For sets that don't form a valid run, falls back to rank sort so
+    the caller still gets stable output.
+    """
+    if _min_wild_count(cards) is None:
+        return sorted(cards)
+
+    non_wild = [c for c in cards if c.rank != WILD_RANK]
+    wild_cards = [c for c in cards if c.rank == WILD_RANK]
+    if not non_wild:
+        return sorted(cards)
+
+    suit = non_wild[0].suit
+    aces = [c for c in non_wild if c.rank == "Ace"]
+    non_ace = [c for c in non_wild if c.rank != "Ace"]
+    fixed_slots = {rank_to_number(c.rank) for c in non_ace}
+
+    if len(aces) == 0:
+        ace_options: list[set[int]] = [set()]
+    elif len(aces) == 1:
+        ace_options = [{1}, {14}]
+    else:
+        ace_options = [{1, 14}]
+
+    matching_suit_twos = sum(1 for c in wild_cards if c.suit == suit)
+    natural_two_options = [0] if matching_suit_twos == 0 else [0, 1]
+    length = len(cards)
+
+    best: tuple[int, int, set[int], int] | None = None
+    for natural_two in natural_two_options:
+        for ace_slots in ace_options:
+            wild_count = len(wild_cards) - natural_two
+            if wild_count < 0 or wild_count > _MAX_WILDS:
+                continue
+            slots = fixed_slots | ace_slots
+            if natural_two:
+                if 2 in slots:
+                    continue
+                slots = slots | {2}
+            if not slots:
+                continue
+            if len(slots) + wild_count != length:
+                continue
+            lo, hi = min(slots), max(slots)
+            if hi - lo + 1 > length:
+                continue
+            start_min = max(1, hi - length + 1)
+            start_max = min(14 - length + 1, lo)
+            if natural_two:
+                start_max = min(start_max, 2)
+            if start_min > start_max:
+                continue
+            # Prefer the LATEST start (start_max) so wilds fill internal gaps
+            # and any remaining wilds extend the run upward toward face cards
+            # rather than stretching it down.
+            start = start_max
+            if best is None or wild_count < best[0]:
+                best = (wild_count, natural_two, ace_slots, start)
+
+    if best is None:
+        return sorted(cards)
+
+    _, natural_two, ace_slots, start = best
+    end = start + length - 1
+
+    placed: dict[int, Card] = {rank_to_number(c.rank): c for c in non_ace}
+    for slot, ace in zip(sorted(ace_slots), aces, strict=False):
+        placed[slot] = ace
+
+    remaining_wilds = list(wild_cards)
+    if natural_two:
+        for i, w in enumerate(remaining_wilds):
+            if w.suit == suit:
+                placed[2] = w
+                remaining_wilds.pop(i)
+                break
+
+    for pos in range(start, end + 1):
+        if pos not in placed and remaining_wilds:
+            placed[pos] = remaining_wilds.pop(0)
+
+    return [placed[s] for s in sorted(placed)]
+
+
 def is_clean(cards: list[Card]) -> bool:
     if len(cards) < _MIN_CANASTRA:
         return False

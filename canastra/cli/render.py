@@ -17,6 +17,7 @@ from uuid import UUID
 from colored import Back, Fore, Style
 
 from canastra.domain.cards import Card
+from canastra.domain.rules import run_order
 from canastra.engine import (
     CardDrawn,
     Chinned,
@@ -109,7 +110,7 @@ def _format_one(ev: Event, names: list[str], state: GameState | None = None) -> 
     if isinstance(ev, MeldCreated):
         color = _team_color(ev.team_id)
         name = names[ev.player_id]
-        meld = _cards_inline(ev.cards)
+        meld = _cards_inline(run_order(list(ev.cards)))
         return (
             f"  {color}{name} (Team {ev.team_id}) "
             f"created meld: {meld}  (id: {_meld_short(ev.meld_id)}){_RESET}"
@@ -122,7 +123,7 @@ def _format_one(ev: Event, names: list[str], state: GameState | None = None) -> 
         if state is not None:
             for m in state.melds.get(ev.team_id, []):
                 if m.id == ev.meld_id:
-                    full_suffix = f" -> {_cards_inline(list(m.cards))}"
+                    full_suffix = f" -> {_cards_inline(run_order(list(m.cards)))}"
                     break
         return (
             f"  {color}{name} (Team {ev.team_id}) "
@@ -239,7 +240,7 @@ def _trash_inline(state: GameState) -> str:
 
 
 def _meld_line(m: Meld) -> str:
-    cards = _cards_inline(m.cards)
+    cards = _cards_inline(run_order(list(m.cards)))
     flag = " [dirty]" if m.permanent_dirty else ""
     return f"{cards}  (id: {_meld_short(m.id)}){flag}"
 

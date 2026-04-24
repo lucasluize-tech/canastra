@@ -24,7 +24,7 @@ from canastra.cli.render import (
     format_table,
 )
 from canastra.cli.setup import build_config_interactive
-from canastra.domain.rules import extends_set
+from canastra.domain.rules import extends_set, run_order
 from canastra.engine import (
     ActionRejected,
     CreateMeld,
@@ -226,7 +226,7 @@ def _team_for(state: GameState, player_id: int) -> int:
 
 def _meld_line_for_listing(m: Meld) -> str:
     """Format a meld for the extend-meld selection list."""
-    cards = " ".join(str(c) for c in m.cards)
+    cards = " ".join(str(c) for c in run_order(list(m.cards)))
     flag = " [dirty]" if m.permanent_dirty else ""
     short = str(m.id)[:6]
     return f"{cards}  (id: {short}){flag}"
