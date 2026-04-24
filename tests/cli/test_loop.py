@@ -192,10 +192,12 @@ class TestDoDiscard:
         new_state, events = _do_discard(
             state,
             names=_NAMES,
-            input_fn=_scripted([
-                "1",
-                "y",
-            ]),
+            input_fn=_scripted(
+                [
+                    "1",
+                    "y",
+                ]
+            ),
             output_fn=outputs.append,
         )
 
@@ -234,14 +236,21 @@ class TestRun:
         """End-to-end test: script enough inputs to get through player 0's turn
         and verify the game advances."""
         monkeypatch.setenv("CANASTRA_SEED", "42")
-        inputs = iter([
-            "4", "2", "2",
-            "Ana", "Bruno", "Carla", "Davi",
-            "d",
-            "d",
-            "1",
-            "y",
-        ])
+        inputs = iter(
+            [
+                "4",
+                "2",
+                "2",
+                "Ana",
+                "Bruno",
+                "Carla",
+                "Davi",
+                "d",
+                "d",
+                "1",
+                "y",
+            ]
+        )
 
         outputs: list[str] = []
 
@@ -258,8 +267,6 @@ class TestRun:
         assert "Ana" in combined
         assert "discard" in combined.lower()
 
-    def test_run_announces_end_of_game_when_scored(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_run_announces_end_of_game_when_scored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Tracked by the manual smoke playthrough in Task 13."""
         pytest.skip("end-to-end chin scripting covered by manual smoke in Task 13")

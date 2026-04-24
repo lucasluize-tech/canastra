@@ -48,13 +48,6 @@ extend-exclude = [
     "build",
     "dist",
     "__pycache__",
-    # Legacy flat modules + tests — frozen, scheduled for deletion in Phase 3
-    # when main.py becomes a thin CLI adapter over canastra.engine.
-    "main.py",
-    "player.py",
-    "table.py",
-    "tests/test_helpers.py",
-    "tests/test_deck.py",
 ]
 
 [tool.ruff.lint]
@@ -80,12 +73,11 @@ indent-style = "space"
 minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-# --cov=. covers the flat layout today. Flip to --cov=canastra after Phase 1.
 addopts = [
     "-ra",
     "--strict-markers",
     "--import-mode=importlib",
-    "--cov=.",
+    "--cov=canastra",
     "--cov-report=term-missing",
     "--cov-report=xml",
 ]
@@ -95,29 +87,26 @@ norecursedirs = ["venv", ".venv", "build", "dist", "__pycache__", ".git"]
 filterwarnings = ["default"]
 
 # ---------------------------------------------------------------------------
-# Coverage: branch coverage on. fail_under starts at 0 (permissive) and will
-# be ratcheted up each refactor phase. Suggested ladder:
+# Coverage: branch coverage on canastra/. fail_under ratcheted up each phase:
 #   Phase 0: 0    (baseline)
 #   Phase 1: 60   (domain package extracted, property tests land)
 #   Phase 2: 75   (engine state machine + scenario tests)
-#   Phase 3: 80   (CLI adapter thin, engine well-covered)
-#   Phase 4+: 85  (FastAPI handlers excluded via pragma where appropriate)
+#   Phase 3: 85   (CLI adapter thin, engine well-covered, legacy gone)
+#   Phase 4+: 90  (FastAPI handlers excluded via pragma where appropriate)
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
 branch = true
-source = ["."]
+source = ["canastra"]
 omit = [
     "venv/*",
     ".venv/*",
     "tests/*",
-    "conftest.py",
-    "main.py",  # interactive loop; covered by CLI/integration tests later
 ]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 80
+fail_under = 85
 exclude_lines = [
     "pragma: no cover",
     "raise NotImplementedError",

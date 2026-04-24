@@ -14,7 +14,7 @@ help:
 	@echo "  install-dev  Install runtime + dev deps"
 	@echo "  lint         ruff check ."
 	@echo "  format       ruff format ."
-	@echo "  typecheck    mypy on flat modules"
+	@echo "  typecheck    mypy on canastra package"
 	@echo "  test         pytest (no coverage gate)"
 	@echo "  test-cov     pytest with coverage report"
 	@echo "  hooks        Install pre-commit git hook"
@@ -36,7 +36,7 @@ format:
 	ruff format .
 
 typecheck:
-	mypy deck.py player.py table.py helpers.py
+	mypy canastra
 
 test:
 	pytest --no-cov

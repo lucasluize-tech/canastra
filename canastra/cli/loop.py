@@ -53,9 +53,7 @@ def run(
         130 on EOFError / KeyboardInterrupt (Unix convention).
     """
     try:
-        config, names = build_config_interactive(
-            input_fn=input_fn, output_fn=output_fn
-        )
+        config, names = build_config_interactive(input_fn=input_fn, output_fn=output_fn)
     except (EOFError, KeyboardInterrupt):
         output_fn("\nGame canceled during setup.")
         return 130
@@ -255,9 +253,7 @@ def _do_discard(
         ):
             return None
         try:
-            new_state, events = apply(
-                state, Discard(player_id=pid, card=card)
-            )
+            new_state, events = apply(state, Discard(player_id=pid, card=card))
         except ActionRejected as e:
             output_fn(format_error(str(e)))
             continue

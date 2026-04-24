@@ -44,7 +44,12 @@ def test_reprompts_on_odd_players(monkeypatch: pytest.MonkeyPatch) -> None:
         "6",  # accepted
         "",  # num_decks default
         "",  # reserves default
-        "A", "B", "C", "D", "E", "F",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
     ]
     outputs: list[str] = []
     config, _ = build_config_interactive(
@@ -62,7 +67,10 @@ def test_reprompts_on_reserves_exceeding_decks(monkeypatch: pytest.MonkeyPatch) 
         "2",  # 2 decks
         "3",  # rejected (reserves > decks)
         "2",  # accepted
-        "A", "B", "C", "D",
+        "A",
+        "B",
+        "C",
+        "D",
     ]
     outputs: list[str] = []
     config, _ = build_config_interactive(

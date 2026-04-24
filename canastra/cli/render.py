@@ -145,8 +145,7 @@ def format_table(state: GameState, viewing_player_id: int, names: list[str]) -> 
 
     lines.append("")
     lines.append(
-        f"{current_color}========= {names[current_pid]} "
-        f"(Team {current_team}) =========={_RESET}"
+        f"{current_color}========= {names[current_pid]} (Team {current_team}) =========={_RESET}"
     )
     lines.append(f"  Deck: {len(state.deck)} cards   Trash top: {_trash_top(state)}")
     lines.append("")
