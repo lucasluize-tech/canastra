@@ -48,7 +48,7 @@ def build_config_interactive(
         output_fn=output_fn,
     )
     reserves = _ask_int_with_default(
-        "Reserve hands per team (2 <= x <= decks)",
+        "Reserve hands per team (1 <= x <= decks)",
         default=min(_DEFAULT_RESERVES, num_decks),
         lo=1,
         hi=_MAX_DECKS,
@@ -116,8 +116,8 @@ def _validate_decks(n: int) -> str | None:
 
 def _make_reserve_validator(num_decks: int) -> Callable[[int], str | None]:
     def _validate(n: int) -> str | None:
-        if n < 2:
-            return "Need at least 2 reserve hands per team."
+        if n < 1:
+            return "Need at least 1 reserve hand per team."
         if n > num_decks:
             return f"Reserve hands per team cannot exceed number of decks ({num_decks})."
         return None

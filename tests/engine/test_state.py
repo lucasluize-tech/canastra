@@ -26,7 +26,7 @@ def test_config_defaults_for_4p2d():
         (3, 2, 2),  # odd players
         (2, 2, 2),  # below minimum
         (4, 1, 2),  # odd decks
-        (4, 2, 1),  # reserves below 2
+        (4, 2, 0),  # reserves below 1
         (4, 2, 3),  # reserves above num_decks
     ],
 )

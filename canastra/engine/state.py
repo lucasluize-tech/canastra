@@ -29,7 +29,7 @@ class GameConfig(BaseModel):
 
     num_players: int = Field(ge=4)
     num_decks: int = Field(ge=2)
-    reserves_per_team: int = Field(ge=2)
+    reserves_per_team: int = Field(ge=1)
     timer_enabled: bool = False
     seed: int
 
