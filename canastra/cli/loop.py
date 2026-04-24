@@ -168,8 +168,8 @@ def _do_discard(
     player cancels at the confirmation step. Caller should drop back
     into the play loop on None.
 
-    Precondition: state.current_turn.phase == Phase.PLAYING (or the
-    engine's designated discard phase — apply() will reject otherwise).
+    Precondition: state.current_turn.phase == Phase.PLAYING. The engine
+    transitions to WAITING_DRAW for the next player on success.
     """
     pid = state.current_turn.player_id
     hand = state.hands[pid]
