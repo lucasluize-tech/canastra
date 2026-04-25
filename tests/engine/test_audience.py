@@ -4,7 +4,6 @@ import uuid
 
 import pytest
 
-from canastra.domain.cards import Card
 from canastra.engine.events import (
     CardDrawn,
     Chinned,
