@@ -154,3 +154,71 @@ class GameState(BaseModel):
         self, reserves: dict[TeamId, list[list[Card]]]
     ) -> dict[str, list[list[dict[str, Any]]]]:
         return {str(k): [_cards_after(h) for h in stacks] for k, stacks in reserves.items()}
+
+    def view_for(self, seat: PlayerId) -> PlayerView:
+        """Return the redacted view for `seat`. Pure; safe to send over the wire."""
+        return PlayerView(
+            config=self.config,
+            action_seq=self.action_seq,
+            seat_order=self.seat_order,
+            teams=self.teams,
+            own_seat=seat,
+            own_hand=list(self.hands.get(seat, [])),
+            hand_counts={pid: len(cards) for pid, cards in self.hands.items()},
+            melds=self.melds,
+            reserves_remaining={
+                team_id: self.config.reserves_per_team - self.reserves_used.get(team_id, 0)
+                for team_id in self.teams
+            },
+            deck_remaining=len(self.deck),
+            trash=list(self.trash),
+            current_turn=self.current_turn,
+            phase=self.phase,
+            chin_team=self.chin_team,
+            winning_team=self.winning_team,
+        )
+
+
+class PlayerView(BaseModel):
+    """Redacted, single-seat view of GameState.
+
+    Cards in private collections are stripped to counts; own hand is revealed.
+    Safe to serialize and send to a single connected player over the wire.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    config: GameConfig
+    action_seq: int
+    seat_order: list[PlayerId]
+    teams: dict[TeamId, list[PlayerId]]
+    own_seat: PlayerId
+    own_hand: list[Card]
+    hand_counts: dict[PlayerId, int]
+    melds: dict[TeamId, list[Meld]]
+    reserves_remaining: dict[TeamId, int]
+    deck_remaining: int
+    trash: list[Card]
+    current_turn: TurnState
+    phase: Phase
+    chin_team: TeamId | None = None
+    winning_team: TeamId | None = None
+
+    @field_validator("own_hand", "trash", mode="before")
+    @classmethod
+    def _parse_card_list(cls, v: Any) -> list[Card]:
+        return _cards_before(v)
+
+    @field_validator("melds", mode="before")
+    @classmethod
+    def _parse_melds_int_keys(cls, v: Any) -> Any:
+        return {int(k): vv for k, vv in v.items()}
+
+    @field_validator("teams", "hand_counts", "reserves_remaining", mode="before")
+    @classmethod
+    def _parse_int_keys(cls, v: Any) -> Any:
+        return {int(k): vv for k, vv in v.items()}
+
+    @field_serializer("own_hand", "trash")
+    def _ser_card_list(self, cards: list[Card]) -> list[dict[str, Any]]:
+        return _cards_after(cards)

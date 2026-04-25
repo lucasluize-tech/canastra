@@ -31,6 +31,7 @@ from canastra.engine.state import (
     GameState,
     Meld,
     Phase,
+    PlayerView,
     TurnState,
 )
 from canastra.engine.timer import forced_discard
@@ -56,6 +57,7 @@ __all__ = [
     "MeldExtended",
     "Phase",
     "PickUpTrash",
+    "PlayerView",
     "ReserveTaken",
     "ScoreBreakdown",
     "TrashPickedUp",
