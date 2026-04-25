@@ -83,7 +83,7 @@ def test_audience_round_trips_through_json():
 # ---------------------------------------------------------------------------
 
 from canastra.domain.cards import HEARTS, Card
-from canastra.engine.actions import CreateMeld, Discard, Draw
+from canastra.engine.actions import Discard, Draw
 from canastra.engine.engine import apply
 from canastra.engine.setup import initial_state
 from canastra.engine.state import GameConfig, Phase
