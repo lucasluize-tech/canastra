@@ -14,11 +14,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from canastra.domain.cards import Card
-from canastra.engine.state import _card_from_dict, _card_to_dict
+from canastra.engine.state import PlayerId, _card_from_dict, _card_to_dict
 
 
 class _EventBase(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    audience: PlayerId | None = None
 
 
 def _one(v: Any) -> Card:
