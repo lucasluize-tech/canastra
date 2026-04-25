@@ -76,3 +76,66 @@ def test_audience_round_trips_through_json():
     blob = ev.model_dump_json()
     restored = CardDrawn.model_validate_json(blob)
     assert restored.audience == 2
+
+
+# ---------------------------------------------------------------------------
+# Handler-level audience annotation tests (Task 2)
+# ---------------------------------------------------------------------------
+
+from canastra.domain.cards import HEARTS, Card
+from canastra.engine.actions import CreateMeld, Discard, Draw
+from canastra.engine.engine import apply
+from canastra.engine.setup import initial_state
+from canastra.engine.state import GameConfig, Phase
+
+
+def test_handler_sets_audience_on_card_drawn():
+    cfg = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+    state = initial_state(cfg)
+    state, events = apply(state, Draw(player_id=state.current_turn.player_id))
+
+    drawn = [ev for ev in events if isinstance(ev, CardDrawn)]
+    assert drawn, "Expected at least one CardDrawn event"
+    for ev in drawn:
+        assert ev.audience == ev.player_id, (
+            f"CardDrawn must target the drawing player, got audience={ev.audience}"
+        )
+
+
+def test_handler_sets_audience_on_reserve_taken():
+    """Drive game into a state where a player empties their hand and must take a reserve.
+    Assert that ReserveTaken events are emitted once per teammate, each with audience=pid."""
+    cfg = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+    state = initial_state(cfg)
+
+    # Team 0 has players 0 and 2.  Force player 0's hand to exactly one card,
+    # put game in PLAYING phase, so that discarding it triggers reserve pickup.
+    only_card = Card(HEARTS, 7)
+    state = state.model_copy(
+        update={
+            "hands": {**state.hands, 0: [only_card]},
+            "current_turn": state.current_turn.model_copy(update={"phase": Phase.PLAYING}),
+            "phase": Phase.PLAYING,
+        }
+    )
+
+    _state, events = apply(state, Discard(player_id=0, card=only_card))
+
+    reserve_events = [ev for ev in events if isinstance(ev, ReserveTaken)]
+
+    # team 0 has 2 players → 2 ReserveTaken events
+    team_0_players = state.teams[0]
+    assert len(reserve_events) == len(team_0_players), (
+        f"Expected {len(team_0_players)} ReserveTaken events (one per teammate), "
+        f"got {len(reserve_events)}"
+    )
+
+    audiences = {ev.audience for ev in reserve_events}
+    assert audiences == set(team_0_players), (
+        f"Expected audience values {set(team_0_players)}, got {audiences}"
+    )
+
+    for ev in reserve_events:
+        assert ev.player_id == 0, "player_id on ReserveTaken should be the player who emptied"
+        assert ev.team_id == 0
+        assert ev.audience is not None, "audience must not be None"

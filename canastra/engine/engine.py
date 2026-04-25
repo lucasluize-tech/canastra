@@ -117,13 +117,15 @@ def _try_empty_hand_resolve(
             updates["current_turn"] = TurnState(player_id=player_id, phase=Phase.PLAYING)
             updates["phase"] = Phase.PLAYING
         new_state = state.model_copy(update=updates)
-        events.append(
-            ReserveTaken(
-                player_id=player_id,
-                team_id=team_id,
-                reserves_remaining=len(new_reserves[team_id]),
+        for pid in state.teams[team_id]:
+            events.append(
+                ReserveTaken(
+                    player_id=player_id,
+                    team_id=team_id,
+                    reserves_remaining=len(new_reserves[team_id]),
+                    audience=pid,
+                )
             )
-        )
         return new_state, events
 
     # No reserves left — end game
@@ -200,7 +202,7 @@ def _handle_draw(state: GameState, action: Draw) -> tuple[GameState, list[Event]
             "phase": Phase.PLAYING,
         },
     )
-    events.append(CardDrawn(player_id=action.player_id, card=card))
+    events.append(CardDrawn(player_id=action.player_id, card=card, audience=action.player_id))
     return new_state, events
 
 
