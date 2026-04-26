@@ -31,7 +31,7 @@ dev = [
 # modules — the entry point is now `python -m canastra` via canastra/__main__.py.
 # ---------------------------------------------------------------------------
 [tool.setuptools]
-packages = ["canastra", "canastra.domain", "canastra.engine", "canastra.cli"]
+packages = ["canastra", "canastra.domain", "canastra.engine", "canastra.cli", "canastra.web"]
 
 # ---------------------------------------------------------------------------
 # Ruff: lint + format. Replaces black + isort + flake8.
