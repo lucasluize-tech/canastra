@@ -1,9 +1,13 @@
 """Tests for RoomManager + Room dataclass — synchronous parts only."""
 
+import inspect
+from uuid import uuid4
+
 import pytest
 
-from canastra.engine import GameConfig
-from canastra.web.rooms import RoomManager, Unavailable
+from canastra.engine import GameConfig, initial_state
+from canastra.engine.actions import Draw
+from canastra.web.rooms import Room, RoomManager, Unavailable
 
 
 def _cfg(num_players=4):
@@ -75,3 +79,31 @@ def test_get_returns_room_or_none():
     room, _ = mgr.create(host_nickname="Alice", config=_cfg())
     assert mgr.get(room.code) is room
     assert mgr.get("NOPENO") is None
+
+
+def test_submit_advances_state_and_returns_events():
+    mgr = RoomManager()
+    room, _ = mgr.create(host_nickname="Alice", config=_cfg())
+    for nick in ("Bob", "Carol", "Dave"):
+        mgr.join(code=room.code, nickname=nick)
+    room.phase = "playing"
+    room.state = initial_state(room.config)
+
+    initial_seq = room.state.action_seq
+    events = room.submit(Draw(player_id=room.state.current_turn.player_id))
+    assert events
+    assert room.state.action_seq == initial_seq + 1
+
+
+def test_submit_is_synchronous():
+    """Compile-time guard: Room.submit must not be a coroutine."""
+    assert not inspect.iscoroutinefunction(Room.submit)
+
+
+def test_recent_results_remembers_idempotently():
+    """SessionBinding.remember_result keeps the cache bounded to 64."""
+    mgr = RoomManager()
+    _, host = mgr.create(host_nickname="Alice", config=_cfg())
+    for _i in range(70):
+        host.remember_result(uuid4(), [])
+    assert len(host.recent_results) == 64

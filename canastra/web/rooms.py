@@ -11,7 +11,20 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from canastra.engine import GameConfig, GameState
+from canastra.engine import (
+    GameConfig,
+    GameState,
+    apply,
+)
+from canastra.engine.actions import Action
+from canastra.engine.events import (
+    Chinned,
+    Discarded,
+    Event,
+    GameEnded,
+    ReserveTaken,
+    TurnAdvanced,
+)
 from canastra.web.codes import generate_room_code
 from canastra.web.session import SessionBinding, SessionStore
 
@@ -35,6 +48,27 @@ class Room:
     _lobby_grace_task: asyncio.Task[None] | None = None
     _closed: bool = False
     _rng: random.Random = field(default_factory=random.Random)
+
+    def submit(self, action: Action) -> list[Event]:
+        """Synchronous read-modify-write. NO ``await`` between read and write of self.state.
+
+        Caller is responsible for catching ActionRejected and translating to a Rejected message.
+        """
+        assert self.state is not None, "Room.submit called before state initialized"
+        new_state, events = apply(self.state, action)
+        self.state = new_state
+        if any(self._event_changes_deadline(ev) for ev in events):
+            self.deadline_changed.set()
+        return events
+
+    @staticmethod
+    def _event_changes_deadline(ev: Event) -> bool:
+        """Heuristic: any TurnAdvanced or new turn-phase boundary may change the deadline.
+
+        Conservative: returning True more often than necessary just wakes the timer loop,
+        which is harmless.
+        """
+        return isinstance(ev, (TurnAdvanced, Discarded, ReserveTaken, Chinned, GameEnded))
 
 
 class RoomManager:
