@@ -1,12 +1,16 @@
 """Tests for RoomManager + Room dataclass — synchronous parts only."""
 
+import asyncio
 import inspect
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
+from canastra.domain.cards import HEARTS, Card
 from canastra.engine import GameConfig, initial_state
 from canastra.engine.actions import Draw
+from canastra.engine.events import CardDrawn, TurnAdvanced
 from canastra.web.rooms import Room, RoomManager, Unavailable
 
 
@@ -107,3 +111,80 @@ def test_recent_results_remembers_idempotently():
     for _i in range(70):
         host.remember_result(uuid4(), [])
     assert len(host.recent_results) == 64
+
+
+# ---------------------------------------------------------------------------
+# Async tests for Room.fanout + _send + _mark_dead (Task 13)
+# ---------------------------------------------------------------------------
+
+
+def _room_with_4_seats() -> Room:
+    """Return a Room with 4 seats, each having a fresh MagicMock WebSocket."""
+    mgr = RoomManager()
+    room, _ = mgr.create(host_nickname="Alice", config=_cfg())
+    for nick in ("Bob", "Carol", "Dave"):
+        mgr.join(code=room.code, nickname=nick)
+    # Attach a mock WebSocket to every binding
+    for binding in room.seats.values():
+        ws = MagicMock()
+        ws.send_text = AsyncMock()
+        binding.ws = ws
+    return room
+
+
+@pytest.mark.asyncio
+async def test_fanout_audience_filter_public_event_goes_to_everyone():
+    """A public event (audience=None) should be sent to all 4 seats."""
+    room = _room_with_4_seats()
+    ev = TurnAdvanced(next_player_id=1)  # audience defaults to None
+    assert ev.audience is None
+
+    await room.fanout([ev], action_seq_start=10)
+
+    for binding in room.seats.values():
+        binding.ws.send_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fanout_private_event_goes_only_to_audience():
+    """A private event (audience=2) should only reach seat 2."""
+    room = _room_with_4_seats()
+    card = Card(suit=HEARTS, rank="Ace")
+    ev = CardDrawn(player_id=2, card=card, audience=2)
+    assert ev.audience == 2
+
+    await room.fanout([ev], action_seq_start=5)
+
+    # Only seat 2 should have received the message
+    room.seats[2].ws.send_text.assert_called_once()
+    for seat, binding in room.seats.items():
+        if seat != 2:
+            binding.ws.send_text.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fanout_drops_slow_client():
+    """A seat whose send_text hangs past _send_timeout is marked dead (ws=None).
+
+    Other seats must still receive the message and the test must complete well
+    under the hang duration (5 s).
+    """
+    room = _room_with_4_seats()
+
+    # Make seat 1 hang forever
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(5)
+
+    room.seats[1].ws.send_text = _hang
+    slow_binding = room.seats[1]
+
+    ev = TurnAdvanced(next_player_id=2)
+    await room.fanout([ev], action_seq_start=0, _send_timeout=0.1)
+
+    # Slow seat must be marked dead
+    assert slow_binding.ws is None
+
+    # All other seats must have received the message
+    for seat, binding in room.seats.items():
+        if seat != 1:
+            binding.ws.send_text.assert_called_once()

@@ -68,6 +68,7 @@ indent-style = "space"
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 minversion = "8.0"
+asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = [
