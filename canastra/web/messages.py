@@ -12,6 +12,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from canastra.engine.actions import Action
+from canastra.engine.events import Event
+from canastra.engine.state import GameConfig, PlayerView
 
 # ---------- Client → Server ----------
 
@@ -53,7 +55,52 @@ class ClientEnvelope(BaseModel):
     msg: ClientMsg
 
 
-# ---------- Server → Client (partial — only Rejected needed by session.py) ----------
+# ---------- Server → Client ----------
+
+
+class SeatInfo(BaseModel):
+    seat: int
+    nickname: str
+    connected: bool
+
+
+class RoomPublic(BaseModel):
+    code: str
+    host_seat: int
+    config: GameConfig
+    phase: Literal["lobby", "playing", "ended"]
+    seats: list[SeatInfo]
+
+
+class Welcome(BaseModel):
+    type: Literal["welcome"] = "welcome"
+    seat: int
+    room: RoomPublic
+
+
+class LobbyUpdate(BaseModel):
+    type: Literal["lobby_update"] = "lobby_update"
+    seats: list[SeatInfo]
+
+
+class Snapshot(BaseModel):
+    type: Literal["snapshot"] = "snapshot"
+    reason: Literal["started", "reconnect", "requested"]
+    snapshot: PlayerView
+    action_seq: int
+    deadline_ms: int | None = None
+
+
+class EventMsg(BaseModel):
+    type: Literal["event"] = "event"
+    event: Event
+    action_seq: int
+
+
+class Accepted(BaseModel):
+    type: Literal["accepted"] = "accepted"
+    client_msg_id: UUID
+    action_seq: int
 
 
 class Rejected(BaseModel):
@@ -75,14 +122,68 @@ class Rejected(BaseModel):
     detail: str | None = None
 
 
+class DeadlineWarning(BaseModel):
+    type: Literal["deadline_warning"] = "deadline_warning"
+    deadline_ms: int
+
+
+class RoomClosed(BaseModel):
+    type: Literal["room_closed"] = "room_closed"
+    reason: Literal["host_left", "empty", "server_shutdown"]
+
+
+class Heartbeat(BaseModel):
+    type: Literal["heartbeat"] = "heartbeat"
+    server_time_ms: int
+
+
+class Pong(BaseModel):
+    type: Literal["pong"] = "pong"
+    client_msg_id: UUID
+    server_time_ms: int
+
+
+ServerMsg = Annotated[
+    Welcome
+    | LobbyUpdate
+    | Snapshot
+    | EventMsg
+    | Accepted
+    | Rejected
+    | DeadlineWarning
+    | RoomClosed
+    | Heartbeat
+    | Pong,
+    Field(discriminator="type"),
+]
+
+
+class ServerEnvelope(BaseModel):
+    v: Literal[1]
+    msg: ServerMsg
+
+
 __all__ = [
+    "Accepted",
     "ClientEnvelope",
     "ClientMsg",
+    "DeadlineWarning",
+    "EventMsg",
+    "Heartbeat",
     "LeaveRoom",
+    "LobbyUpdate",
     "Ping",
+    "Pong",
     "Rejected",
     "Rematch",
     "RequestSnapshot",
+    "RoomClosed",
+    "RoomPublic",
+    "SeatInfo",
+    "ServerEnvelope",
+    "ServerMsg",
+    "Snapshot",
     "StartGame",
     "SubmitAction",
+    "Welcome",
 ]
