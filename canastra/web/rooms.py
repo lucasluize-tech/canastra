@@ -76,19 +76,23 @@ class Room:
         self,
         events: list[Event],
         *,
-        action_seq_start: int,
+        action_seq: int,
         _send_timeout: float = 2.0,
     ) -> None:
         """Broadcast ``events`` to all seats that should receive each event.
+
+        All events from a single ``submit()`` call share the same ``action_seq``
+        because the engine bumps ``state.action_seq`` by 1 per action regardless
+        of how many events that action emits. Callers should pass the
+        post-submit ``self.state.action_seq``.
 
         ``ev.audience is None`` means all seats; otherwise only the matching seat.
         Sends are concurrent via ``asyncio.gather``; a slow or dead client is
         dropped via ``_mark_dead`` without blocking others.
         """
         seats_snapshot = list(self.seats.items())
-        for offset, ev in enumerate(events, start=1):
-            action_seq = action_seq_start + offset
-            coros = []
+        coros = []
+        for ev in events:
             for seat, binding in seats_snapshot:
                 if ev.audience is not None and ev.audience != seat:
                     continue
@@ -96,8 +100,8 @@ class Room:
                     continue
                 envelope = ServerEnvelope(v=1, msg=EventMsg(event=ev, action_seq=action_seq))
                 coros.append(self._send(binding, envelope, timeout=_send_timeout))
-            if coros:
-                await asyncio.gather(*coros, return_exceptions=True)
+        if coros:
+            await asyncio.gather(*coros, return_exceptions=True)
 
     async def _send(
         self,

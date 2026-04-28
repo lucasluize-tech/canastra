@@ -139,7 +139,7 @@ async def test_fanout_audience_filter_public_event_goes_to_everyone():
     ev = TurnAdvanced(next_player_id=1)  # audience defaults to None
     assert ev.audience is None
 
-    await room.fanout([ev], action_seq_start=10)
+    await room.fanout([ev], action_seq=11)
 
     for binding in room.seats.values():
         binding.ws.send_text.assert_called_once()
@@ -153,7 +153,7 @@ async def test_fanout_private_event_goes_only_to_audience():
     ev = CardDrawn(player_id=2, card=card, audience=2)
     assert ev.audience == 2
 
-    await room.fanout([ev], action_seq_start=5)
+    await room.fanout([ev], action_seq=6)
 
     # Only seat 2 should have received the message
     room.seats[2].ws.send_text.assert_called_once()
@@ -179,7 +179,7 @@ async def test_fanout_drops_slow_client():
     slow_binding = room.seats[1]
 
     ev = TurnAdvanced(next_player_id=2)
-    await room.fanout([ev], action_seq_start=0, _send_timeout=0.1)
+    await room.fanout([ev], action_seq=1, _send_timeout=0.1)
 
     # Slow seat must be marked dead
     assert slow_binding.ws is None
@@ -188,3 +188,24 @@ async def test_fanout_drops_slow_client():
     for seat, binding in room.seats.items():
         if seat != 1:
             binding.ws.send_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fanout_assigns_same_action_seq_to_all_events_from_one_submit():
+    """All events from one submit() share the same action_seq.
+
+    Engine bumps state.action_seq by 1 per action regardless of event count,
+    so a Discard producing (Discarded, TurnAdvanced) must broadcast both with
+    the same seq — otherwise client gap detection breaks on reconnect.
+    """
+    room = _room_with_4_seats()
+    events = [TurnAdvanced(next_player_id=1), TurnAdvanced(next_player_id=2)]
+
+    await room.fanout(events, action_seq=42)
+
+    # Each seat should have received both events, both at seq=42
+    for binding in room.seats.values():
+        assert binding.ws.send_text.call_count == 2
+        for call in binding.ws.send_text.call_args_list:
+            blob = call.args[0]
+            assert '"action_seq":42' in blob
