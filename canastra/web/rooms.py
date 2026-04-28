@@ -209,6 +209,23 @@ class Room:
         if any(isinstance(ev, GameEnded) for ev in events):
             self.phase = "ended"
 
+    def start_lobby_grace(self, *, timeout: float = 60.0) -> None:
+        """Start a grace timer that closes the room if the host doesn't reconnect in time.
+
+        Safe to call multiple times — no-ops if a grace task is already running.
+        """
+        if self._lobby_grace_task is not None and not self._lobby_grace_task.done():
+            return
+        self._lobby_grace_task = asyncio.create_task(
+            _lobby_grace(self, timeout), name=f"lobby-grace-{self.code}"
+        )
+
+    def cancel_lobby_grace(self) -> None:
+        """Cancel the lobby grace timer if one is running (e.g. host reconnected)."""
+        if self._lobby_grace_task is not None and not self._lobby_grace_task.done():
+            self._lobby_grace_task.cancel()
+        self._lobby_grace_task = None
+
 
 class RoomManager:
     def __init__(self) -> None:
@@ -255,6 +272,20 @@ class RoomManager:
 
     def get(self, code: str) -> Room | None:
         return self.rooms.get(code)
+
+
+async def _lobby_grace(room: Room, timeout: float) -> None:
+    """Sleep for ``timeout`` seconds then mark the room closed.
+
+    Cancelled immediately (by ``cancel_lobby_grace``) if the host reconnects
+    before the timer fires.  No fanout is done here — WS handler loops detect
+    ``room._closed`` and exit on their own.
+    """
+    try:
+        await asyncio.sleep(timeout)
+    except asyncio.CancelledError:
+        return
+    room._closed = True
 
 
 async def _timer_loop(room: Room) -> None:

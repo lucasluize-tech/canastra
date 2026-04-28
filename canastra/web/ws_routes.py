@@ -95,6 +95,9 @@ async def ws_room(
         if old is not None and old is not ws:
             asyncio.create_task(_close_old(old))
 
+    if binding.seat == room.host_seat:
+        room.cancel_lobby_grace()
+
     welcome = ServerEnvelope(
         v=1, msg=Welcome(type="welcome", seat=binding.seat, room=room.public_info())
     )
@@ -128,6 +131,8 @@ async def ws_room(
                 binding.ws = None
         if room.phase == "lobby":
             await room.broadcast_lobby_update()
+        if room.phase == "lobby" and binding.seat == room.host_seat:
+            room.start_lobby_grace(timeout=60.0)
 
 
 async def _close_old(ws: WebSocket) -> None:
