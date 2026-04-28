@@ -281,6 +281,10 @@ async def _handle_request_snapshot(room: Room, binding: SessionBinding, msg_id: 
 
 
 async def _handle_leave_room(room: Room, binding: SessionBinding) -> None:
+    """Player explicitly leaves. In lobby, free the seat; mid-game, keep the seat
+    but mark them disconnected so turns still advance correctly."""
+    if room.phase == "lobby":
+        room.seats.pop(binding.seat, None)
     ws = binding.ws
     binding.ws = None
     if ws is not None:
