@@ -226,6 +226,8 @@ async def _handle_submit_action(
         await _reject(binding, client_msg_id=msg_id, reason="illegal_action")
         return
 
+    room.maybe_end_after_events(events)
+
     assert room.state is not None  # submit() requires state; phase == "playing" guarantees it
     action_seq = room.state.action_seq
 

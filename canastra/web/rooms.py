@@ -190,6 +190,11 @@ class Room:
         self.state = initial_state(self.config)
         self.phase = "playing"
 
+    def maybe_end_after_events(self, events: list[Event]) -> None:
+        """If any GameEnded event fired, transition phase to 'ended' so Rematch is valid."""
+        if any(isinstance(ev, GameEnded) for ev in events):
+            self.phase = "ended"
+
 
 class RoomManager:
     def __init__(self) -> None:

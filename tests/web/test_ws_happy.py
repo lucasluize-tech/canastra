@@ -277,3 +277,27 @@ def test_request_snapshot_returns_snapshot_during_play(app):
             resp = wss[1].receive_json()
             assert resp["msg"]["type"] == "snapshot"
             assert resp["msg"]["reason"] == "requested"
+
+
+def test_room_phase_transitions_to_ended_on_game_ended_event(app):
+    """Room.phase flips to 'ended' when the engine emits GameEnded so Rematch is valid."""
+    from canastra.engine import GameConfig
+    from canastra.engine.events import GameEnded
+    from canastra.web.rooms import RoomManager
+
+    with TestClient(app):  # trigger lifespan to populate app.state.manager
+        mgr: RoomManager = app.state.manager
+        cfg = GameConfig(num_players=4, num_decks=2, reserves_per_team=2, seed=42)
+        room, _ = mgr.create(host_nickname="Alice", config=cfg)
+        for nick in ("Bob", "Carol", "Dave"):
+            mgr.join(code=room.code, nickname=nick)
+        room.start_game()
+
+        assert room.phase == "playing"
+        room.maybe_end_after_events([GameEnded(winning_team=0, scores={0: 100, 1: 50})])
+        assert room.phase == "ended"
+
+        # No-op when no GameEnded in events
+        room.phase = "playing"
+        room.maybe_end_after_events([])
+        assert room.phase == "playing"
