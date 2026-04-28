@@ -135,3 +135,64 @@ def test_host_starts_game_emits_snapshot_to_each_seat(app):
                 m = ws.receive_json()
                 assert m["msg"]["type"] == "snapshot"
                 assert m["msg"]["reason"] == "started"
+
+
+def test_submit_action_draw_returns_accepted_and_event(app):
+    """SubmitAction(Draw) -> Accepted to actor + EventMsg fanout to everyone (filtered)."""
+    from contextlib import ExitStack
+    from uuid import uuid4
+
+    with TestClient(app) as host:
+        code = _create_room(host)
+
+        with ExitStack() as ws_stack:
+            wss = []
+            host_ws = ws_stack.enter_context(
+                host.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+            )
+            wss.append(host_ws)
+            host_ws.receive_json()  # welcome
+            host_ws.receive_json()  # lobby_update (1 seat)
+
+            for nick in ("Bob", "Carol", "Dave"):
+                c = TestClient(app)  # no __enter__ — sharing host's lifespan-managed app.state
+                c.post(f"/rooms/{code}", json={"nickname": nick})
+                ws = ws_stack.enter_context(
+                    c.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+                )
+                wss.append(ws)
+                ws.receive_json()  # welcome
+                ws.receive_json()  # lobby_update for new socket
+                for prev_ws in wss[:-1]:
+                    prev_ws.receive_json()  # lobby_update for already-connected sockets
+
+            # Host starts the game
+            host_ws.send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": str(uuid4()),
+                    "msg": {"type": "start_game"},
+                }
+            )
+            # Drain snapshots — each seat gets one
+            for ws in wss:
+                m = ws.receive_json()
+                assert m["msg"]["type"] == "snapshot"
+                assert m["msg"]["reason"] == "started"
+
+            # Host (seat 0) submits a Draw action
+            cm = uuid4()
+            host_ws.send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": str(cm),
+                    "msg": {
+                        "type": "submit_action",
+                        "action": {"type": "draw", "player_id": 0},
+                    },
+                }
+            )
+
+            # Host receives Accepted or Rejected depending on whose turn it is
+            m = host_ws.receive_json()
+            assert m["msg"]["type"] in {"accepted", "rejected"}

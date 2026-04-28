@@ -11,13 +11,16 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from canastra.engine.errors import ActionRejected
 from canastra.web.http_routes import COOKIE_MAX_AGE, COOKIE_NAME
 from canastra.web.messages import (
+    Accepted,
     ClientEnvelope,
     Rejected,
     ServerEnvelope,
     Snapshot,
     StartGame,
+    SubmitAction,
     Welcome,
 )
 from canastra.web.rooms import Room, RoomManager, Unavailable
@@ -144,6 +147,10 @@ async def _handle_message(room: Room, binding: SessionBinding, raw: str) -> None
         await _handle_start_game(room, binding, env.client_msg_id)
         return
 
+    if isinstance(msg, SubmitAction):
+        await _handle_submit_action(room, binding, env.client_msg_id, msg)
+        return
+
     await _reject(binding, client_msg_id=env.client_msg_id, reason="bad_message")
 
 
@@ -179,6 +186,39 @@ async def _handle_start_game(room: Room, binding: SessionBinding, msg_id: UUID) 
     if coros:
         await asyncio.gather(*coros, return_exceptions=True)
     binding.remember_result(msg_id, [])
+
+
+async def _handle_submit_action(
+    room: Room, binding: SessionBinding, msg_id: UUID, msg: SubmitAction
+) -> None:
+    if room.phase != "playing":
+        await _reject(binding, client_msg_id=msg_id, reason="wrong_phase")
+        return
+
+    # Server overwrites the action's player_id with the session seat
+    action = msg.action.model_copy(update={"player_id": binding.seat})
+
+    try:
+        events = room.submit(action)
+    except ActionRejected:
+        await _reject(binding, client_msg_id=msg_id, reason="illegal_action")
+        return
+
+    assert room.state is not None  # submit() requires state; phase == "playing" guarantees it
+    action_seq = room.state.action_seq
+
+    # Send Accepted to the actor
+    accepted = ServerEnvelope(
+        v=1,
+        msg=Accepted(type="accepted", client_msg_id=msg_id, action_seq=action_seq),
+    )
+    if binding.ws is not None:
+        with contextlib.suppress(Exception):
+            await binding.ws.send_text(accepted.model_dump_json())
+
+    # Fanout events to all connected seats
+    await room.fanout(events, action_seq=action_seq)
+    binding.remember_result(msg_id, events)
 
 
 RejectReason = Literal[
