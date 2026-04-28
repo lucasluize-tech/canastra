@@ -137,7 +137,7 @@ class Room:
             with contextlib.suppress(Exception):
                 await ws.close(code=1011)
 
-    def public_info(self) -> "RoomPublic":
+    def public_info(self) -> RoomPublic:
         from canastra.web.messages import RoomPublic, SeatInfo
 
         return RoomPublic(

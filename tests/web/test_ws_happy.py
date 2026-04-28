@@ -85,3 +85,53 @@ def test_lobby_update_broadcast_on_join(app):
                 msg = host_ws.receive_json()
                 assert msg["msg"]["type"] == "lobby_update"
                 assert len(msg["msg"]["seats"]) == 2
+
+
+def test_host_starts_game_emits_snapshot_to_each_seat(app):
+    """All 4 players see Snapshot(reason='started') after host StartGame."""
+    from contextlib import ExitStack
+    from uuid import uuid4
+
+    with TestClient(app) as host:
+        code = _create_room(host)
+
+        # ExitStack so every WS context exits (and its server-side handler
+        # finishes its finally block) BEFORE the host TestClient lifespan
+        # tears down — otherwise _shutdown_manager tries to send to still-live
+        # cross-loop WebSocket objects and blocks past the 5s timeout.
+        with ExitStack() as ws_stack:
+            wss = []
+            host_ws = ws_stack.enter_context(
+                host.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+            )
+            wss.append(host_ws)
+            host_ws.receive_json()  # welcome
+            host_ws.receive_json()  # lobby_update (1 seat)
+
+            # Each new joiner triggers a lobby_update broadcast to every connected
+            # socket. Drain eagerly per-connection or TestClient's sync send queue
+            # back-pressures and the test deadlocks.
+            for nick in ("Bob", "Carol", "Dave"):
+                c = TestClient(app)  # no __enter__ — sharing host's lifespan-managed app.state
+                c.post(f"/rooms/{code}", json={"nickname": nick})
+                ws = ws_stack.enter_context(
+                    c.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+                )
+                wss.append(ws)
+                ws.receive_json()  # welcome
+                ws.receive_json()  # lobby_update for new socket
+                for prev_ws in wss[:-1]:
+                    prev_ws.receive_json()  # lobby_update for already-connected sockets
+
+            host_ws.send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": str(uuid4()),
+                    "msg": {"type": "start_game"},
+                }
+            )
+
+            for ws in wss:
+                m = ws.receive_json()
+                assert m["msg"]["type"] == "snapshot"
+                assert m["msg"]["reason"] == "started"
