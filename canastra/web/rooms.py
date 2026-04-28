@@ -201,7 +201,7 @@ class Room:
             return
         if self.timer_task is not None and not self.timer_task.done():
             return
-        self.timer_task = asyncio.create_task(_timer_loop(self))
+        self.timer_task = asyncio.create_task(_timer_loop(self), name=f"timer-{self.code}")
         self.timer_task.add_done_callback(_on_timer_done)
 
     def maybe_end_after_events(self, events: list[Event]) -> None:
@@ -264,7 +264,7 @@ async def _timer_loop(room: Room) -> None:
         if room.state is None:
             await room.deadline_changed.wait()
             continue
-        deadline = getattr(room.state.current_turn, "deadline_at", None)
+        deadline = room.state.current_turn.deadline_at
         if deadline is None:
             await room.deadline_changed.wait()
             continue
@@ -293,4 +293,4 @@ def _on_timer_done(task: asyncio.Task[None]) -> None:
         return
     exc = task.exception()
     if exc is not None:
-        logger.error("Timer task crashed; closing room", exc_info=exc)
+        logger.error("Timer task crashed; timer no longer running", exc_info=exc)
