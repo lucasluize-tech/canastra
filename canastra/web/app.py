@@ -36,8 +36,10 @@ def create_app(*, debug: bool = False) -> FastAPI:
     fastapi_app = FastAPI(lifespan=lifespan)
 
     from canastra.web.http_routes import router as http_router
+    from canastra.web.ws_routes import router as ws_router
 
     fastapi_app.include_router(http_router)
+    fastapi_app.include_router(ws_router)
 
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     if os.path.isdir(static_dir):

@@ -10,7 +10,10 @@ import contextlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from canastra.web.messages import RoomPublic
 
 from canastra.engine import (
     GameConfig,
@@ -133,6 +136,47 @@ class Room:
         if ws is not None:
             with contextlib.suppress(Exception):
                 await ws.close(code=1011)
+
+    def public_info(self) -> "RoomPublic":
+        from canastra.web.messages import RoomPublic, SeatInfo
+
+        return RoomPublic(
+            code=self.code,
+            host_seat=self.host_seat,
+            config=self.config,
+            phase=self.phase,
+            seats=[
+                SeatInfo(seat=s, nickname=b.nickname, connected=b.ws is not None)
+                for s, b in sorted(self.seats.items())
+            ],
+        )
+
+    async def broadcast_lobby_update(self) -> None:
+        from canastra.web.messages import LobbyUpdate, SeatInfo, ServerEnvelope
+
+        env = ServerEnvelope(
+            v=1,
+            msg=LobbyUpdate(
+                type="lobby_update",
+                seats=[
+                    SeatInfo(seat=s, nickname=b.nickname, connected=b.ws is not None)
+                    for s, b in sorted(self.seats.items())
+                ],
+            ),
+        )
+        coros = [self._send(b, env) for b in self.seats.values() if b.ws is not None]
+        if coros:
+            await asyncio.gather(*coros, return_exceptions=True)
+
+    def start_game(self) -> None:
+        from canastra.engine import initial_state
+
+        if self.phase != "lobby":
+            raise Unavailable
+        if len(self.seats) != self.config.num_players:
+            raise Unavailable
+        self.state = initial_state(self.config)
+        self.phase = "playing"
 
 
 class RoomManager:
