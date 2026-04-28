@@ -81,6 +81,11 @@ addopts = [
 ]
 # Don't let pytest wander into the venv or build dirs looking for tests.
 norecursedirs = ["venv", ".venv", "build", "dist", "__pycache__", ".git"]
+# pytest-env: ensure module-level app = create_app(...) in app.py takes the debug
+# branch during test runs, avoiding assertion failures on import.
+env = [
+    "CANASTRA_DEBUG=1",
+]
 # Filter noisy prints from the legacy tests; keep warnings visible.
 filterwarnings = ["default"]
 
