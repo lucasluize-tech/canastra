@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+from canastra.web.messages import RoomClosed, ServerEnvelope
+from canastra.web.rooms import RoomManager
 
 
 def create_app(*, debug: bool = False) -> FastAPI:
@@ -21,10 +23,8 @@ def create_app(*, debug: bool = False) -> FastAPI:
             "Phase 4 requires uvicorn --workers 1; multi-worker silently partitions rooms"
         )
 
-    @asynccontextmanager
+    @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        from canastra.web.rooms import RoomManager
-
         app.state.manager = RoomManager()
         app.state.secret = (secret or "debug-secret-debug-secret-debug-").encode("utf-8")
         try:
@@ -40,13 +40,9 @@ def create_app(*, debug: bool = False) -> FastAPI:
     return fastapi_app
 
 
-async def _shutdown_manager(manager: object) -> None:
+async def _shutdown_manager(manager: RoomManager) -> None:
     """Cancel timer tasks, broadcast RoomClosed(server_shutdown), close sockets, drop rooms."""
-    from canastra.web.messages import RoomClosed, ServerEnvelope
-    from canastra.web.rooms import RoomManager
-
-    mgr: RoomManager = manager  # type: ignore[assignment]
-    rooms = list(mgr.rooms.values())
+    rooms = list(manager.rooms.values())
 
     # Cancel all background tasks first
     for room in rooms:
@@ -77,7 +73,7 @@ async def _shutdown_manager(manager: object) -> None:
                 await ws.close(code=1001)
         room._closed = True
 
-    mgr.rooms.clear()
+    manager.rooms.clear()
 
 
 app = create_app(debug=os.environ.get("CANASTRA_DEBUG") == "1")
