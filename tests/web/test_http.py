@@ -62,3 +62,54 @@ def test_post_rooms_rejects_bad_config(client):
         },
     )
     assert resp.status_code == 422
+
+
+def _create_room(client, nickname="Alice"):
+    resp = client.post(
+        "/rooms",
+        json={
+            "nickname": nickname,
+            "num_players": 4,
+            "num_decks": 2,
+            "reserves_per_team": 2,
+            "timer_enabled": False,
+        },
+    )
+    assert resp.status_code == 200
+    return resp.json()["room_code"]
+
+
+def test_join_room_allocates_seat_and_sets_cookie(client):
+    code = _create_room(client)
+    other = TestClient(client.app)  # fresh client without host's cookie
+    resp = other.post(f"/rooms/{code}", json={"nickname": "Bob"})
+    assert resp.status_code == 200
+    assert resp.json()["seat"] == 1
+    assert any(c.lower().startswith("canastra_session=") for c in resp.headers.get_list("set-cookie"))
+
+
+def test_join_unknown_room_returns_unavailable(client):
+    other = TestClient(client.app)
+    resp = other.post("/rooms/ZZZZZZ", json={"nickname": "Bob"})
+    assert resp.status_code == 404
+    assert resp.json() == {"error": "unavailable"}
+
+
+def test_join_full_room_returns_unavailable(client):
+    code = _create_room(client)
+    for nick in ("Bob", "Carol", "Dave"):
+        other = TestClient(client.app)
+        other.post(f"/rooms/{code}", json={"nickname": nick})
+    eve = TestClient(client.app)
+    resp = eve.post(f"/rooms/{code}", json={"nickname": "Eve"})
+    assert resp.status_code == 404
+
+
+def test_get_room_public_info(client):
+    code = _create_room(client)
+    resp = client.get(f"/rooms/{code}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == code
+    assert body["host_seat"] == 0
+    assert body["phase"] == "lobby"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
@@ -82,6 +82,55 @@ async def post_rooms(
 
     _set_session_cookie(response, binding.session_id, secret)
     return CreateRoomResponse(room_code=room.code)
+
+
+class JoinRoomRequest(BaseModel):
+    nickname: str = Field(min_length=1, max_length=20)
+
+
+class JoinRoomResponse(BaseModel):
+    seat: int
+
+
+@router.post("/rooms/{code}", response_model=JoinRoomResponse)
+async def post_room_join(
+    code: str,
+    body: JoinRoomRequest,
+    response: Response,
+    manager: Annotated[RoomManager, Depends(_manager)],
+    secret: Annotated[bytes, Depends(_secret)],
+) -> JoinRoomResponse:
+    try:
+        _, binding = manager.join(code=code, nickname=body.nickname)
+    except Unavailable:
+        return _unavailable()  # type: ignore[return-value]
+
+    _set_session_cookie(response, binding.session_id, secret)
+    return JoinRoomResponse(seat=binding.seat)
+
+
+@router.get("/rooms/{code}")
+async def get_room_public(
+    code: str,
+    manager: Annotated[RoomManager, Depends(_manager)],
+) -> dict[str, Any]:
+    room = manager.get(code)
+    if room is None:
+        return _unavailable()  # type: ignore[return-value]
+    return {
+        "code": room.code,
+        "host_seat": room.host_seat,
+        "phase": room.phase,
+        "seats": [
+            {
+                "seat": s,
+                "nickname": b.nickname,
+                "connected": b.ws is not None,
+            }
+            for s, b in sorted(room.seats.items())
+        ],
+        "config": room.config.model_dump(),
+    }
 
 
 @router.get("/")
