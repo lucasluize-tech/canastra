@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import random
 import re
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -21,7 +23,8 @@ from canastra.engine import (
     GameState,
     apply,
 )
-from canastra.engine.actions import Action
+from canastra.engine import timer as _engine_timer
+from canastra.engine.actions import Action, Discard
 from canastra.engine.events import (
     Chinned,
     Discarded,
@@ -35,6 +38,8 @@ from canastra.web.messages import EventMsg, ServerEnvelope
 from canastra.web.session import SessionBinding, SessionStore
 
 NICKNAME_RE = re.compile(r"^[\w \-']{1,20}$")
+
+logger = logging.getLogger(__name__)
 
 
 class Unavailable(Exception):
@@ -190,6 +195,15 @@ class Room:
         self.state = initial_state(self.config)
         self.phase = "playing"
 
+    def start_timer_task(self) -> None:
+        """Start the per-room AFK timer task if timer_enabled and not already running."""
+        if not self.config.timer_enabled:
+            return
+        if self.timer_task is not None and not self.timer_task.done():
+            return
+        self.timer_task = asyncio.create_task(_timer_loop(self))
+        self.timer_task.add_done_callback(_on_timer_done)
+
     def maybe_end_after_events(self, events: list[Event]) -> None:
         """If any GameEnded event fired, transition phase to 'ended' so Rematch is valid."""
         if any(isinstance(ev, GameEnded) for ev in events):
@@ -241,3 +255,42 @@ class RoomManager:
 
     def get(self, code: str) -> Room | None:
         return self.rooms.get(code)
+
+
+async def _timer_loop(room: Room) -> None:
+    """Watch the current turn's deadline_at and apply forced_discard when it lapses."""
+    while not room._closed:
+        room.deadline_changed.clear()
+        if room.state is None:
+            await room.deadline_changed.wait()
+            continue
+        deadline = getattr(room.state.current_turn, "deadline_at", None)
+        if deadline is None:
+            await room.deadline_changed.wait()
+            continue
+        timeout = max(0.0, deadline - time.time())
+        try:
+            await asyncio.wait_for(room.deadline_changed.wait(), timeout=timeout)
+            continue
+        except TimeoutError:
+            pass
+        try:
+            if room.state is None:
+                continue
+            pid = room.state.current_turn.player_id
+            card = _engine_timer.forced_discard(room.state, pid, room._rng)
+            action = Discard(player_id=pid, card=card)
+            events = room.submit(action)
+            await room.fanout(events, action_seq=room.state.action_seq)
+            room.maybe_end_after_events(events)
+        except Exception:
+            logger.exception("forced_discard failed; retrying in 2s")
+            await asyncio.sleep(2.0)
+
+
+def _on_timer_done(task: asyncio.Task[None]) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("Timer task crashed; closing room", exc_info=exc)

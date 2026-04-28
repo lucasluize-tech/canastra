@@ -186,6 +186,7 @@ async def _handle_start_game(room: Room, binding: SessionBinding, msg_id: UUID) 
         await _reject(binding, client_msg_id=msg_id, reason="wrong_lobby_phase")
         return
 
+    room.start_timer_task()
     assert room.state is not None  # start_game() guarantees state is set
 
     # Send Snapshot(reason="started") to every connected seat
@@ -303,6 +304,7 @@ async def _handle_rematch(room: Room, binding: SessionBinding, msg_id: UUID) -> 
     except Unavailable:
         await _reject(binding, client_msg_id=msg_id, reason="wrong_lobby_phase")
         return
+    room.start_timer_task()
     assert room.state is not None
     coros = []
     for seat, b in sorted(room.seats.items()):
