@@ -34,6 +34,11 @@ def create_app(*, debug: bool = False) -> FastAPI:
                 await asyncio.wait_for(_shutdown_manager(app.state.manager), timeout=5.0)
 
     fastapi_app = FastAPI(lifespan=lifespan)
+
+    from canastra.web.http_routes import router as http_router
+
+    fastapi_app.include_router(http_router)
+
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     if os.path.isdir(static_dir):
         fastapi_app.mount("/static", StaticFiles(directory=static_dir), name="static")
