@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import random
 import re
 from dataclasses import dataclass, field
@@ -175,6 +176,17 @@ class Room:
             raise Unavailable
         if len(self.seats) != self.config.num_players:
             raise Unavailable
+        self.state = initial_state(self.config)
+        self.phase = "playing"
+
+    def rematch(self) -> None:
+        """Re-deal a fresh hand. Bumps seed; transitions ended -> playing."""
+        from canastra.engine import initial_state
+
+        if self.phase != "ended":
+            raise Unavailable
+        new_seed = int.from_bytes(os.urandom(8), "big")
+        self.config = self.config.model_copy(update={"seed": new_seed})
         self.state = initial_state(self.config)
         self.phase = "playing"
 

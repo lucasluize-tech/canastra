@@ -196,3 +196,84 @@ def test_submit_action_draw_returns_accepted_and_event(app):
             # Host receives Accepted or Rejected depending on whose turn it is
             m = host_ws.receive_json()
             assert m["msg"]["type"] in {"accepted", "rejected"}
+
+
+def test_ping_returns_pong(app):
+    """Ping → Pong echoes the same client_msg_id."""
+    from uuid import uuid4
+
+    with TestClient(app) as client:
+        code = _create_room(client)
+        with client.websocket_connect(
+            f"/ws/room/{code}", headers={"origin": "http://testserver"}
+        ) as ws:
+            ws.receive_json()  # welcome
+            ws.receive_json()  # lobby_update
+
+            msg_id = str(uuid4())
+            ws.send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": msg_id,
+                    "msg": {"type": "ping"},
+                }
+            )
+            resp = ws.receive_json()
+            assert resp["msg"]["type"] == "pong"
+            assert resp["msg"]["client_msg_id"] == msg_id
+
+
+def test_request_snapshot_returns_snapshot_during_play(app):
+    """RequestSnapshot during play → Snapshot(reason='snapshot') to requesting seat only."""
+    from contextlib import ExitStack
+    from uuid import uuid4
+
+    with TestClient(app) as host:
+        code = _create_room(host)
+
+        with ExitStack() as ws_stack:
+            wss = []
+            host_ws = ws_stack.enter_context(
+                host.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+            )
+            wss.append(host_ws)
+            host_ws.receive_json()  # welcome
+            host_ws.receive_json()  # lobby_update (1 seat)
+
+            for nick in ("Bob", "Carol", "Dave"):
+                c = TestClient(app)
+                c.post(f"/rooms/{code}", json={"nickname": nick})
+                ws = ws_stack.enter_context(
+                    c.websocket_connect(f"/ws/room/{code}", headers={"origin": "http://testserver"})
+                )
+                wss.append(ws)
+                ws.receive_json()  # welcome
+                ws.receive_json()  # lobby_update for new socket
+                for prev_ws in wss[:-1]:
+                    prev_ws.receive_json()  # lobby_update for already-connected sockets
+
+            # Start the game
+            host_ws.send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": str(uuid4()),
+                    "msg": {"type": "start_game"},
+                }
+            )
+            for ws in wss:
+                m = ws.receive_json()
+                assert m["msg"]["type"] == "snapshot"
+                assert m["msg"]["reason"] == "started"
+
+            # Bob (seat 1) requests a snapshot
+            msg_id = str(uuid4())
+            wss[1].send_json(
+                {
+                    "v": 1,
+                    "client_msg_id": msg_id,
+                    "msg": {"type": "request_snapshot"},
+                }
+            )
+            resp = wss[1].receive_json()
+            assert resp["msg"]["type"] == "snapshot"
+            assert resp["msg"]["reason"] == "requested"
