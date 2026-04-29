@@ -32,7 +32,9 @@ def test_post_rooms_creates_and_sets_cookie(client):
     body = resp.json()
     assert "room_code" in body
     assert len(body["room_code"]) == 6
-    assert any(c.lower().startswith("canastra_session=") for c in resp.headers.get_list("set-cookie"))
+    assert any(
+        c.lower().startswith("canastra_session=") for c in resp.headers.get_list("set-cookie")
+    )
 
 
 def test_post_rooms_rejects_bad_nickname(client):
@@ -85,7 +87,9 @@ def test_join_room_allocates_seat_and_sets_cookie(client):
     resp = other.post(f"/rooms/{code}", json={"nickname": "Bob"})
     assert resp.status_code == 200
     assert resp.json()["seat"] == 1
-    assert any(c.lower().startswith("canastra_session=") for c in resp.headers.get_list("set-cookie"))
+    assert any(
+        c.lower().startswith("canastra_session=") for c in resp.headers.get_list("set-cookie")
+    )
 
 
 def test_join_unknown_room_returns_unavailable(client):

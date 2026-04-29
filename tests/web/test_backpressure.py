@@ -35,9 +35,7 @@ async def test_slow_client_dropped_after_send_timeout():
     slow_ws.close = AsyncMock()
     room.seats[slow_seat].ws = slow_ws
 
-    await room.fanout(
-        [TurnAdvanced(next_player_id=0)], action_seq=0, _send_timeout=0.05
-    )
+    await room.fanout([TurnAdvanced(next_player_id=0)], action_seq=0, _send_timeout=0.05)
 
     assert room.seats[slow_seat].ws is None
     for s in fast_seats:

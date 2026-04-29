@@ -68,9 +68,7 @@ class SessionBinding:
     created_at: datetime
     ws: WebSocket | None = None
     ws_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    recent_results: OrderedDict[UUID, list[Event] | Rejected] = field(
-        default_factory=OrderedDict
-    )
+    recent_results: OrderedDict[UUID, list[Event] | Rejected] = field(default_factory=OrderedDict)
 
     def remember_result(self, msg_id: UUID, result: list[Event] | Rejected) -> None:
         """Store a per-session result, bounded to the most recent 64 entries."""

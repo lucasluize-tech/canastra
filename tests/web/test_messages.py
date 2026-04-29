@@ -163,9 +163,7 @@ def test_event_msg_round_trip():
 
 def test_accepted_carries_client_msg_id():
     cm = uuid4()
-    env = ServerEnvelope(
-        v=1, msg=Accepted(type="accepted", client_msg_id=cm, action_seq=99)
-    )
+    env = ServerEnvelope(v=1, msg=Accepted(type="accepted", client_msg_id=cm, action_seq=99))
     restored = ServerEnvelope.model_validate_json(env.model_dump_json())
     assert isinstance(restored.msg, Accepted)
     assert restored.msg.client_msg_id == cm
@@ -198,15 +196,11 @@ def test_deadline_warning_round_trip():
 
 
 def test_heartbeat_round_trip():
-    env = ServerEnvelope(
-        v=1, msg=Heartbeat(type="heartbeat", server_time_ms=1700000000000)
-    )
+    env = ServerEnvelope(v=1, msg=Heartbeat(type="heartbeat", server_time_ms=1700000000000))
     ServerEnvelope.model_validate_json(env.model_dump_json())
 
 
 def test_pong_round_trip():
     cm = uuid4()
-    env = ServerEnvelope(
-        v=1, msg=Pong(type="pong", client_msg_id=cm, server_time_ms=1700000000000)
-    )
+    env = ServerEnvelope(v=1, msg=Pong(type="pong", client_msg_id=cm, server_time_ms=1700000000000))
     ServerEnvelope.model_validate_json(env.model_dump_json())
