@@ -1,7 +1,7 @@
 # Canastra — Technical Architecture
 
-> **Last updated:** Phase 3 complete (2026-04-23)
-> **Status:** Pure domain package, deterministic game engine, and thin CLI adapter all shipped. Legacy flat modules deleted; service/delivery layers pending.
+> **Last updated:** Phase 4 complete (2026-04-28)
+> **Status:** Pure domain package, deterministic engine, thin CLI adapter, and FastAPI WebSocket delivery layer all shipped. Persistence pending (Phase 5).
 
 This document is the structural reference for the Canastra codebase. It is
 updated at the end of every migration phase (see §10). For **rules**, see the
@@ -119,12 +119,22 @@ canastra/                         # repo root
 │   │   ├── engine.py             # apply(state, action) → (state', events) + per-action handlers
 │   │   ├── scoring.py            # end_of_game_score + card-removal greedy
 │   │   └── timer.py              # forced_discard priority ladder for timer rule
-│   └── cli/                      # Phase 3 — thin interactive adapter over engine
-│       ├── __init__.py           # exports run
-│       ├── setup.py              # build_config_interactive — prompts → (GameConfig, names)
-│       ├── prompts.py            # BadInput + parse_* + ask_* wrappers
-│       ├── render.py             # format_hand / _table / _events / _score / _error
-│       └── loop.py               # run() + _do_draw_phase / _do_play_phase / _do_discard
+│   ├── cli/                      # Phase 3 — thin interactive adapter over engine
+│   │   ├── __init__.py           # exports run
+│   │   ├── setup.py              # build_config_interactive — prompts → (GameConfig, names)
+│   │   ├── prompts.py            # BadInput + parse_* + ask_* wrappers
+│   │   ├── render.py             # format_hand / _table / _events / _score / _error
+│   │   └── loop.py               # run() + _do_draw_phase / _do_play_phase / _do_discard
+│   └── web/                      # Phase 4 — FastAPI HTTP + WebSocket delivery
+│       ├── __init__.py
+│       ├── app.py                # create_app factory + lifespan-managed RoomManager
+│       ├── codes.py              # Crockford-Base32 6-char room-code generator
+│       ├── session.py            # SessionStore + signed-cookie helpers + SessionBinding
+│       ├── messages.py           # ClientEnvelope / ServerEnvelope discriminated unions
+│       ├── rooms.py              # Room + RoomManager + fanout + AFK timer + lobby grace
+│       ├── http_routes.py        # POST /rooms · POST /rooms/{code} · GET /rooms/{code} · GET /
+│       ├── ws_routes.py          # /ws/room/{code} — receive loop + dispatch
+│       └── static/index.html     # vanilla-JS test harness (deleted in Phase 6)
 │
 └── tests/
     ├── domain/
@@ -143,13 +153,28 @@ canastra/                         # repo root
     │   ├── test_scoring.py       # end-of-game card-removal + bonus tally
     │   ├── test_timer.py         # forced-discard priority ladder
     │   └── test_replay.py        # seed + action log → deterministic final state
-    └── cli/
-        ├── test_scaffold.py      # package import sanity
-        ├── test_prompts.py       # parse_* (BadInput cases) + ask_* reprompt loops
-        ├── test_render.py        # format_hand / _table / _events / _score / _error
-        ├── test_setup.py         # build_config_interactive prompts + CANASTRA_SEED env
-        ├── test_loop.py          # run() phase dispatch + EOF → 130 + scripted game
-        └── test_main_module.py   # `python -m canastra` subprocess smoke
+    ├── cli/
+    │   ├── test_scaffold.py      # package import sanity
+    │   ├── test_prompts.py       # parse_* (BadInput cases) + ask_* reprompt loops
+    │   ├── test_render.py        # format_hand / _table / _events / _score / _error
+    │   ├── test_setup.py         # build_config_interactive prompts + CANASTRA_SEED env
+    │   ├── test_loop.py          # run() phase dispatch + EOF → 130 + scripted game
+    │   └── test_main_module.py   # `python -m canastra` subprocess smoke
+    └── web/                      # Phase 4 — FastAPI/WebSocket integration tests
+        ├── test_messages.py          # envelope round-trip
+        ├── test_messages_property.py # Hypothesis envelope round-trip
+        ├── test_messages_fuzz.py     # random JSON → only ValidationError allowed
+        ├── test_http.py              # POST /rooms · POST /rooms/{code} · GET /rooms/{code}
+        ├── test_ws_happy.py          # welcome / lobby_update / cookie auth
+        ├── test_reconnect.py         # cookie-bound reconnect → Snapshot(reason="reconnect")
+        ├── test_timer.py             # AFK timer → forced_discard
+        ├── test_lobby_grace.py       # host-disconnect grace timer
+        ├── test_backpressure.py      # slow client dropped, room continues
+        ├── test_ws_adversarial.py    # 9 unhappy paths (rejection / origin / idempotency)
+        ├── test_ws_races.py          # spec §11.2 races
+        ├── test_replay_determinism.py # engine.apply outside the WS layer
+        ├── test_concurrency.py       # static guard: Room.submit has no `await`
+        └── test_shutdown.py          # lifespan teardown drops rooms cleanly
 ```
 
 ---
@@ -322,6 +347,24 @@ Interactive terminal adapter over `canastra.engine` — translates user input in
 - **`__main__.py`** — 5-line entry point: `raise SystemExit(run())`.
 
 **Contract:** `run(input_fn, output_fn) → int`, exit code `0` on normal end-of-game, `130` on EOF. Every I/O is routed through the injected callables so tests use scripted input lists without monkeypatching `stdin`/`stdout`.
+
+### 4.11 `canastra.web`
+
+FastAPI HTTP + WebSocket delivery layer over `canastra.engine`. The engine remains pure — `web/` translates JSON commands into engine actions and engine events into JSON output without ever leaking private cards across audiences.
+
+- **`app.py`** — `create_app(*, debug=False) -> FastAPI`. Asserts `CANASTRA_SESSION_SECRET` (≥ 32 bytes) and `WEB_CONCURRENCY=1` in non-debug. Lifespan creates a `RoomManager` and tears it down (cancel timer + lobby-grace tasks → broadcast `RoomClosed("server_shutdown")` → `ws.close(1001)` → drop rooms) inside `asyncio.wait_for(timeout=5.0)`.
+- **`codes.py`** — Crockford Base32 (`0-9A-Z` minus `I/L/O/U`); 6-char codes; `RoomManager` retries on collision.
+- **`session.py`** — opaque `session_id` via `secrets.token_urlsafe(32)`; `SessionBinding` is a dataclass holding `ws`, `ws_lock` (asyncio.Lock), and `recent_results` (idempotency cache, 64-entry bound). Cookie sign/verify via `itsdangerous.URLSafeTimedSerializer`.
+- **`messages.py`** — `ClientEnvelope` + `ServerEnvelope` carrying `v: 1` and a discriminated-union inner `msg`. Client: `StartGame | SubmitAction | Rematch | LeaveRoom | RequestSnapshot | Ping`. Server: `Welcome | LobbyUpdate | Snapshot | EventMsg | Accepted | Rejected | DeadlineWarning | RoomClosed | Heartbeat | Pong`. `Rejected.reason` and `RoomClosed.reason` are `Literal` enums.
+- **`rooms.py`** — `Room.submit(action)` is the synchronous read-modify-write chokepoint (no `await` between read and write of `state`); `Room.fanout` filters by `Event.audience` and applies a per-send `asyncio.wait_for` timeout that drops slow clients via `_mark_dead`. AFK timer is per-room with a `deadline_changed: asyncio.Event` to avoid tight loops. Lobby grace task cancels on host reconnect.
+- **`http_routes.py`** — All "unknown room / full / started" paths return identical `404 {"error":"unavailable"}` to prevent code enumeration.
+- **`ws_routes.py`** — Origin allowlist, signed-cookie verification, per-session `ws_lock` for the reconnect-swap, and dispatch for every `ClientMsg` type. Server overwrites `action.player_id` with `binding.seat` before passing to the engine so a malicious client can't impersonate another seat.
+
+**Key invariants:**
+
+- Engine never imports from `web/`.
+- Private cards never leak: `Event.audience` and `GameState.view_for(seat)` own redaction.
+- `Room.submit` is sync end-to-end; atomicity is asserted by `tests/web/test_concurrency.py`.
 
 ---
 
@@ -521,7 +564,7 @@ TODO comments in `ci.yml` sketch the Phase 4 (API integration + Postgres service
 | 1 | Extract pure domain → `canastra/domain/`, add property tests, xfail Phase 2 specs | ✅ 2026-04-18 | `canastra.domain.*` clean under ruff + mypy strict; 44 pass / 5 xfail |
 | 2 | Game engine state machine. Fix the 5 xfails. Implement wild-reinterpret, permanent-dirty, end-of-game scoring algorithm, timer rule, chin semantics | ✅ 2026-04-22 | `(state, action) → (state', events)` for a full game; chin + deck-exhaust + timer scenarios green |
 | 3 | Thin CLI adapter over engine (`python -m canastra`); delete legacy flat modules. | ✅ 2026-04-23 | `python -m canastra` plays end-to-end; no module-scope I/O; 196 tests / 92% coverage |
-| 4 | FastAPI HTTP + WebSockets. RoomManager, auth (magic link), private hand broadcasting, reconnect via snapshot replay. | ⏳ | Two browser tabs play a full game over WS |
+| 4 | FastAPI HTTP + WebSockets. RoomManager, auth (cookie-bound session), private hand broadcasting, reconnect via Snapshot. | ✅ 2026-04-28 | Two browser tabs play a full game over WS on localhost |
 | 5 | Postgres persistence: users, games, append-only `action_log`, periodic `snapshots`. | ⏳ | Server restart mid-game → clients reconnect and resume |
 | 6 | Frontend (web client). Event-stream-driven UI. | ⏳ | Family plays a real game |
 | 7 | Hardening: N-player generalization (currently 4 is the only fully-tested path), spectators, AFK timeouts, rate limiting. | ⏳ | 6p/6d and 8p/6d games complete without regressions |
