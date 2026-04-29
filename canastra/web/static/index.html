@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>canastra (test harness)</title>
+<style>
+  body { font-family: ui-monospace, monospace; margin: 1rem; max-width: 960px; }
+  fieldset { margin-bottom: 1rem; }
+  pre { background: #111; color: #eee; padding: 0.75rem; max-height: 60vh; overflow: auto; }
+  input, button, select { font: inherit; }
+  .seat { padding: 0.25rem 0.5rem; border-radius: 6px; background: #eef; margin-right: 0.25rem; }
+  .seat.disconnected { background: #fee; }
+</style>
+</head>
+<body>
+<h1>canastra — Phase 4 test harness</h1>
+
+<fieldset id="join-fs">
+  <legend>Lobby</legend>
+  <form id="create-form">
+    <label>Nickname <input name="nickname" required maxlength="20" /></label>
+    <label>Players <input name="num_players" type="number" min="2" max="8" value="4" /></label>
+    <label>Decks <input name="num_decks" type="number" min="1" max="6" value="2" /></label>
+    <label>Reserves/team <input name="reserves_per_team" type="number" min="1" max="6" value="2" /></label>
+    <label>Timer <input name="timer_enabled" type="checkbox" /></label>
+    <button>Create room</button>
+  </form>
+  <form id="join-form">
+    <label>Code <input name="code" required maxlength="6" /></label>
+    <label>Nickname <input name="nickname" required maxlength="20" /></label>
+    <button>Join</button>
+  </form>
+</fieldset>
+
+<fieldset id="play-fs" disabled>
+  <legend>Connection</legend>
+  <div id="seats"></div>
+  <button id="start-btn">Start game</button>
+  <button id="rematch-btn">Rematch</button>
+  <button id="snapshot-btn">Request snapshot</button>
+  <textarea id="action-input" rows="3" cols="80"
+    placeholder='{"type":"draw","player_id":0}'></textarea>
+  <button id="submit-action-btn">Submit action</button>
+</fieldset>
+
+<h2>Event log</h2>
+<pre id="log"></pre>
+
+<script>
+const log = (...args) => {
+  const ts = new Date().toISOString().split("T")[1].slice(0,8);
+  document.getElementById("log").textContent += `[${ts}] ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}\n`;
+};
+const newId = () => crypto.randomUUID();
+let ws = null;
+let mySeat = null;
+
+const connectWs = (code) => {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/room/${code}`);
+  ws.onopen = () => { log("ws open"); document.getElementById("play-fs").disabled = false; };
+  ws.onmessage = (ev) => {
+    const env = JSON.parse(ev.data);
+    log("<-", env);
+    const m = env.msg;
+    if (m.type === "welcome") { mySeat = m.seat; }
+    if (m.type === "lobby_update") { renderSeats(m.seats); }
+  };
+  ws.onclose = (ev) => { log("ws closed", ev.code); };
+};
+
+const renderSeats = (seats) => {
+  const div = document.getElementById("seats");
+  div.innerHTML = "";
+  for (const s of seats) {
+    const span = document.createElement("span");
+    span.className = "seat" + (s.connected ? "" : " disconnected");
+    span.textContent = `[seat ${s.seat}] ${s.nickname}${s.connected ? "" : " (gone)"}`;
+    div.appendChild(span);
+  }
+};
+
+const send = (msg) => {
+  const env = { v: 1, client_msg_id: newId(), msg };
+  log("->", env);
+  ws.send(JSON.stringify(env));
+};
+
+document.getElementById("create-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    nickname: fd.get("nickname"),
+    num_players: Number(fd.get("num_players")),
+    num_decks: Number(fd.get("num_decks")),
+    reserves_per_team: Number(fd.get("reserves_per_team")),
+    timer_enabled: fd.get("timer_enabled") === "on",
+  };
+  const r = await fetch("/rooms", { method: "POST", credentials: "include",
+    headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  log("created", j);
+  connectWs(j.room_code);
+});
+
+document.getElementById("join-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const code = fd.get("code");
+  const r = await fetch(`/rooms/${code}`, { method: "POST", credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ nickname: fd.get("nickname") }) });
+  const j = await r.json();
+  log("joined", j);
+  connectWs(code);
+});
+
+document.getElementById("start-btn").onclick = () => send({ type: "start_game" });
+document.getElementById("rematch-btn").onclick = () => send({ type: "rematch" });
+document.getElementById("snapshot-btn").onclick = () => send({ type: "request_snapshot" });
+document.getElementById("submit-action-btn").onclick = () => {
+  const raw = document.getElementById("action-input").value;
+  const action = JSON.parse(raw);
+  send({ type: "submit_action", action });
+};
+</script>
+</body>
+</html>
