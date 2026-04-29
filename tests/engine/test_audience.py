@@ -139,3 +139,57 @@ def test_handler_sets_audience_on_reserve_taken():
         assert ev.player_id == 0, "player_id on ReserveTaken should be the player who emptied"
         assert ev.team_id == 0
         assert ev.audience is not None, "audience must not be None"
+
+
+# ---------------------------------------------------------------------------
+# Truth-table over every Event subclass — guards against new event types
+# being added without an audience-policy decision.
+# ---------------------------------------------------------------------------
+
+PUBLIC_EVENT_TYPES = (
+    TurnAdvanced,
+    Discarded,
+    MeldCreated,
+    MeldExtended,
+    TrashPickedUp,
+    DeckReplenished,
+    Chinned,
+    GameEnded,
+)
+PRIVATE_EVENT_TYPES = (CardDrawn, ReserveTaken)
+
+
+def _construct_dummy(event_cls):
+    if event_cls is TurnAdvanced:
+        return event_cls(next_player_id=1)
+    if event_cls is Discarded:
+        return event_cls(player_id=0, card=_CARD)
+    if event_cls is MeldCreated:
+        return event_cls(player_id=0, team_id=0, meld_id=_MELD_ID, cards=[_CARD])
+    if event_cls is MeldExtended:
+        return event_cls(player_id=0, team_id=0, meld_id=_MELD_ID, added=[_CARD])
+    if event_cls is TrashPickedUp:
+        return event_cls(player_id=0, cards=[_CARD])
+    if event_cls is DeckReplenished:
+        return event_cls(team_id=0, cards_added=1)
+    if event_cls is Chinned:
+        return event_cls(team_id=0)
+    if event_cls is GameEnded:
+        return event_cls(winning_team=0, scores={0: 1, 1: 0})
+    if event_cls is CardDrawn:
+        return event_cls(player_id=2, card=_CARD, audience=2)
+    if event_cls is ReserveTaken:
+        return event_cls(player_id=0, team_id=0, reserves_remaining=1, audience=0)
+    raise NotImplementedError(event_cls)
+
+
+@pytest.mark.parametrize("event_cls", PUBLIC_EVENT_TYPES)
+def test_public_event_audience_is_none(event_cls):
+    ev = _construct_dummy(event_cls)
+    assert ev.audience is None
+
+
+@pytest.mark.parametrize("event_cls", PRIVATE_EVENT_TYPES)
+def test_private_event_audience_is_set_when_provided(event_cls):
+    ev = _construct_dummy(event_cls)
+    assert ev.audience is not None
