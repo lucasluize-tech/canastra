@@ -87,6 +87,20 @@ For reproducible games (useful for debugging or playtesting a specific shuffle),
 CANASTRA_SEED=42 python -m canastra
 ```
 
+### Run as WebSocket server (Phase 4)
+
+```shell
+CANASTRA_SESSION_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))") \
+  CANASTRA_DEBUG=1 \
+  WEB_CONCURRENCY=1 \
+  uvicorn canastra.web:app --reload --host 127.0.0.1 --port 8000
+```
+
+Or just `make web`. Then open `http://localhost:8000/` in two browser tabs to play — tab 1 creates a room, tab 2 joins with the code, host clicks **Start game**.
+
+- For temporary public access during a family game, run `cloudflared tunnel --url http://localhost:8000` in another shell.
+- For a stable URL, deploy on Fly.io or Railway (deferred to a later phase).
+
 ## Usage
 
 ### Playing a game
@@ -164,7 +178,7 @@ This project is being incrementally refactored into a web-multiplayer game. Phas
 | 1 | Pure domain package extraction | ✅ shipped |
 | 2 | Game engine state machine | ✅ shipped |
 | 3 | Thin CLI adapter (`python -m canastra`); legacy shims deleted | ✅ shipped |
-| 4 | FastAPI HTTP + WebSocket multiplayer | ⏳ next |
+| 4 | FastAPI HTTP + WebSocket multiplayer | ✅ shipped |
 | 5 | Postgres persistence (action log + snapshots) | ⏳ |
 | 6 | Web frontend | ⏳ |
 
