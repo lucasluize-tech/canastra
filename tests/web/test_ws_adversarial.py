@@ -189,9 +189,16 @@ def test_duplicate_client_msg_id_is_idempotent(app):
 # ---------------------------------------------------------------------------
 
 
-def test_origin_mismatch_closes_connection(app):
-    """Connecting from a disallowed origin → server closes (WebSocketDisconnect)."""
-    with TestClient(app) as client:
+def test_origin_mismatch_closes_connection(monkeypatch):
+    """Connecting from a disallowed origin → server closes (WebSocketDisconnect).
+
+    Debug mode is permissive (any origin OK for localhost smoke tests), so this
+    security check has to run in production mode."""
+    monkeypatch.setenv("CANASTRA_SESSION_SECRET", "x" * 32)
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    monkeypatch.delenv("CANASTRA_DEBUG", raising=False)
+    prod_app = create_app(debug=False)
+    with TestClient(prod_app) as client:
         code = _create_room(client)
         with (
             pytest.raises(WebSocketDisconnect),
