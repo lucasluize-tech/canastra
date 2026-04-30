@@ -399,7 +399,10 @@ const handleMessage = (m) => {
       break;
     case "snapshot":
       snapshot     = m.snapshot;
-      gamePhase    = m.snapshot.phase;
+      // Engine Phase ("waiting_draw" | "playing" | "ended") is finer-grained
+      // than the Room phase ("lobby" | "playing" | "ended"). Collapse to the
+      // Room phase for UI: any non-"ended" engine phase means the game is live.
+      gamePhase    = m.snapshot.phase === "ended" ? "ended" : "playing";
       currentTurn  = m.snapshot.current_turn?.player_id ?? null;
       myHand       = m.snapshot.own_hand ?? [];
       break;
