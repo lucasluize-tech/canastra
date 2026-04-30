@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import time
 from typing import Annotated, Literal
@@ -32,6 +33,7 @@ from canastra.web.messages import (
 from canastra.web.rooms import Room, RoomManager, Unavailable
 from canastra.web.session import SessionBinding, verify_cookie
 
+log = logging.getLogger("canastra.web.ws")
 router = APIRouter()
 
 
@@ -44,9 +46,18 @@ def _secret(ws: WebSocket) -> bytes:
 
 
 def _origin_allowed(origin: str | None) -> bool:
+    # In debug mode, accept any origin (or no origin) — make web is localhost-only.
+    if os.environ.get("CANASTRA_DEBUG") == "1":
+        return True
     if origin is None:
         return False
-    allowed = {"http://localhost", "http://localhost:8000", "http://testserver"}
+    allowed = {
+        "http://localhost",
+        "http://localhost:8000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8000",
+        "http://testserver",
+    }
     public = os.environ.get("CANASTRA_PUBLIC_HOST")
     if public:
         allowed.add(f"https://{public}")
@@ -64,7 +75,9 @@ async def ws_room(
     manager: Annotated[RoomManager, Depends(_manager)],
     secret: Annotated[bytes, Depends(_secret)],
 ):
-    if not _origin_allowed(ws.headers.get("origin")):
+    origin = ws.headers.get("origin")
+    if not _origin_allowed(origin):
+        log.warning("WS rejected: origin=%r host=%r", origin, ws.headers.get("host"))
         await ws.close(code=4403)
         return
 
