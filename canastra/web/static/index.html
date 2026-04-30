@@ -4,27 +4,46 @@
 <meta charset="utf-8" />
 <title>canastra (test harness)</title>
 <style>
-  body { font-family: ui-monospace, monospace; margin: 1rem; max-width: 960px; }
+  body { font-family: ui-monospace, monospace; margin: 1rem; max-width: 1024px; }
   fieldset { margin-bottom: 1rem; }
-  pre { background: #111; color: #eee; padding: 0.75rem; max-height: 40vh; overflow: auto; font-size: 12px; }
+  legend { font-weight: 600; }
+  pre { background: #111; color: #eee; padding: 0.75rem; max-height: 30vh; overflow: auto; font-size: 12px; }
   input, button, select, textarea { font: inherit; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
+  label { margin-right: 0.75rem; }
 
+  /* Status banner */
   #status { padding: 0.6rem 0.8rem; border-radius: 6px; margin-bottom: 0.75rem; font-weight: 600; }
   .status-lobby   { background: #eef; color: #224; }
   .status-myturn  { background: #cfa; color: #163; }
   .status-waiting { background: #fed; color: #642; }
   .status-ended   { background: #ddd; color: #333; }
 
-  .seat { padding: 0.25rem 0.5rem; border-radius: 6px; background: #eef; margin-right: 0.25rem; display: inline-block; margin-bottom: 0.25rem; }
+  /* Team colors — matching CLI yellow/blue */
+  .team-0 { color: #b07d00; }  .team-bg-0 { background: #fff5cc; border: 1px solid #d4a000; }
+  .team-1 { color: #224488; }  .team-bg-1 { background: #ddeeff; border: 1px solid #446; }
+
+  /* Seats */
+  .team-row { padding: 0.5rem; border-radius: 6px; margin-bottom: 0.4rem; }
+  .seat { padding: 0.25rem 0.5rem; border-radius: 6px; background: #fff; margin-right: 0.25rem; display: inline-block; margin-bottom: 0.25rem; border: 1px solid #ccc; }
   .seat.disconnected { background: #fee; color: #844; }
-  .seat.active { background: #ffe066; color: #443; box-shadow: 0 0 0 2px #d49b00; }
+  .seat.active { box-shadow: 0 0 0 2px #d49b00; font-weight: bold; }
   .seat.me { outline: 2px dashed #339; }
 
+  /* Hand */
   #hand { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0; }
-  .card { padding: 0.3rem 0.5rem; border: 1px solid #999; border-radius: 6px; background: #fff; font-size: 14px; }
+  .card { padding: 0.3rem 0.5rem; border: 1px solid #999; border-radius: 6px; background: #fff; font-size: 14px; min-width: 2.4rem; text-align: center; }
   .card.red { color: #c33; }
+  .card.wild { background: #efe; border-color: #6a6; }
   .card-idx { color: #888; font-size: 10px; display: block; }
+
+  /* Table */
+  .table-row { margin: 0.25rem 0; }
+  .meld { display: inline-flex; flex-wrap: wrap; gap: 0.15rem; padding: 0.25rem 0.4rem; border-radius: 4px; margin: 0.15rem 0.25rem 0.15rem 0; vertical-align: middle; }
+  .meld-card { padding: 0.1rem 0.3rem; background: #fff; border: 1px solid #aaa; border-radius: 3px; font-size: 13px; }
+  .meld-card.red { color: #c33; }
+  .dirty { font-size: 11px; color: #844; margin-left: 0.4rem; }
+  .trash { background: #faf6e8; padding: 0.4rem; border-radius: 4px; border: 1px dashed #aa9; }
 </style>
 </head>
 <body>
@@ -32,37 +51,88 @@
 
 <div id="status" class="status-lobby">not connected</div>
 
+<!-- ======================================================================
+     Lobby (room creation + join)
+     ====================================================================== -->
 <fieldset id="join-fs">
   <legend>Lobby</legend>
+
   <form id="create-form">
+    <strong>Create a new room</strong><br>
     <label>Nickname <input name="nickname" required maxlength="20" /></label>
     <label>Players <input name="num_players" type="number" min="2" max="8" value="4" /></label>
     <label>Decks <input name="num_decks" type="number" min="1" max="6" value="2" /></label>
     <label>Reserves/team <input name="reserves_per_team" type="number" min="1" max="6" value="2" /></label>
     <label>Timer <input name="timer_enabled" type="checkbox" /></label>
+    <br>
+    <label>Team assignment
+      <select name="team_mode">
+        <option value="by_join_order">by join order (auto)</option>
+        <option value="by_choice">players choose teams</option>
+      </select>
+    </label>
+    <span id="host-team-row" style="display:none">
+      <label>Your team
+        <label><input type="radio" name="host_team" value="0" /> <span class="team-0">Team 0</span></label>
+        <label><input type="radio" name="host_team" value="1" /> <span class="team-1">Team 1</span></label>
+      </label>
+    </span>
+    <br><br>
     <button>Create room</button>
   </form>
+
+  <hr>
+
   <form id="join-form">
+    <strong>Join an existing room</strong><br>
     <label>Code <input name="code" required maxlength="6" /></label>
-    <label>Nickname <input name="nickname" required maxlength="20" /></label>
-    <button>Join</button>
+    <button id="lookup-btn" type="button">Look up</button>
+    <span id="join-details" style="display:none">
+      <br>
+      <span id="join-room-info" style="font-size: 12px; color: #555;"></span><br>
+      <label>Nickname <input name="nickname" required maxlength="20" /></label>
+      <span id="join-team-row" style="display:none">
+        <label>Team
+          <label><input type="radio" name="team" value="0" /> <span class="team-0">Team 0</span></label>
+          <label><input type="radio" name="team" value="1" /> <span class="team-1">Team 1</span></label>
+        </label>
+      </span>
+      <button>Join</button>
+    </span>
   </form>
 </fieldset>
 
+<!-- ======================================================================
+     Connection & table
+     ====================================================================== -->
 <fieldset id="play-fs" disabled>
-  <legend>Connection</legend>
+  <legend>Room</legend>
+
   <div id="seats"></div>
+
   <div style="margin: 0.5rem 0;">
     <button id="start-btn" disabled>Start game</button>
     <button id="rematch-btn" disabled>Rematch</button>
     <button id="snapshot-btn">Request snapshot</button>
   </div>
 
-  <div>
+  <!-- Table state — shown only during play -->
+  <fieldset id="table-fs" style="display:none; margin-top: 0.75rem;">
+    <legend>Table</legend>
+    <div class="table-row" id="turn-banner"></div>
+    <div class="table-row" id="counts"></div>
+    <div class="table-row"><strong>Trash:</strong> <span id="trash" class="trash"></span></div>
+    <div class="table-row" id="team-0-melds"></div>
+    <div class="table-row" id="team-1-melds"></div>
+  </fieldset>
+
+  <!-- Your hand -->
+  <div style="margin-top: 0.75rem;">
     <strong>Your hand:</strong>
     <div id="hand"><em style="color:#888">no snapshot yet</em></div>
   </div>
 
+  <!-- Action input -->
   <div style="margin-top: 0.75rem;">
     <textarea id="action-input" rows="3" cols="80"
       placeholder='{"type":"draw","player_id":0}'></textarea>
@@ -76,20 +146,22 @@
 <pre id="log"></pre>
 
 <script>
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Client state — minimal mirror of the server view.
-// ---------------------------------------------------------------------------
+// ===========================================================================
 let ws = null;
 let mySeat = null;
 let hostSeat = null;
+let teamMode = "by_join_order";
 let gamePhase = "lobby";          // "lobby" | "playing" | "ended"
-let currentTurn = null;           // PlayerId | null
+let currentTurn = null;
 let seats = [];                   // [{seat, nickname, connected}]
 let myHand = [];                  // [{suit, rank}]
+let snapshot = null;              // most recent PlayerView; drives the table render
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Logging helper.
-// ---------------------------------------------------------------------------
+// ===========================================================================
 const log = (...args) => {
   const ts = new Date().toISOString().split("T")[1].slice(0,8);
   document.getElementById("log").textContent +=
@@ -98,82 +170,208 @@ const log = (...args) => {
   el.scrollTop = el.scrollHeight;
 };
 const newId = () => crypto.randomUUID();
+const teamForSeat = (s) => s % 2;
 const nicknameForSeat = (s) => seats.find(x => x.seat === s)?.nickname ?? `seat ${s}`;
+const isRedSuit = (s) => s === "♥" || s === "♦";
+const isWild = (rank) => rank === 2;
+const cardLabel = (c) => `${c.rank} ${c.suit}`;
 
-// ---------------------------------------------------------------------------
-// Render — recompute UI from client state. Called after every state change.
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Render — recompute UI from client state. Called after every change.
+// ===========================================================================
 const render = () => {
-  // Status banner
-  const status = document.getElementById("status");
-  status.className = "";
+  renderStatus();
+  renderSeats();
+  renderHand();
+  renderTable();
+  renderButtons();
+};
+
+const renderStatus = () => {
+  const el = document.getElementById("status");
+  el.className = "";
   if (gamePhase === "lobby") {
-    status.className = "status-lobby";
-    status.textContent = mySeat === hostSeat
-      ? "Lobby — you're the host. Wait for everyone to join, then click Start game."
-      : `Lobby — waiting for host (${nicknameForSeat(hostSeat)}) to start.`;
+    el.className = "status-lobby";
+    const modeNote = teamMode === "by_choice" ? " (teams chosen by players)" : "";
+    el.textContent = mySeat === hostSeat
+      ? `Lobby — you're the host${modeNote}. Wait for everyone to join, then click Start game.`
+      : `Lobby — waiting for host (${nicknameForSeat(hostSeat)}) to start${modeNote}.`;
   } else if (gamePhase === "playing") {
     if (currentTurn === mySeat) {
-      status.className = "status-myturn";
-      status.textContent = "▶ Your turn — submit an action.";
+      el.className = "status-myturn";
+      el.textContent = "▶ Your turn — submit an action.";
     } else {
-      status.className = "status-waiting";
-      status.textContent = `Waiting for ${nicknameForSeat(currentTurn)} (seat ${currentTurn}) to play…`;
+      el.className = "status-waiting";
+      el.textContent = `Waiting for ${nicknameForSeat(currentTurn)} (seat ${currentTurn}, Team ${teamForSeat(currentTurn)}) to play…`;
     }
   } else if (gamePhase === "ended") {
-    status.className = "status-ended";
-    status.textContent = mySeat === hostSeat
-      ? "Game ended — click Rematch to deal a new hand."
-      : "Game ended — waiting for host to start a rematch.";
+    el.className = "status-ended";
+    const winText = snapshot?.winning_team !== undefined && snapshot?.winning_team !== null
+      ? ` — Team ${snapshot.winning_team} wins!`
+      : "";
+    el.textContent = mySeat === hostSeat
+      ? `Game ended${winText} — click Rematch to deal a new hand.`
+      : `Game ended${winText} — waiting for host to start a rematch.`;
   }
+};
 
-  // Seats
+const renderSeats = () => {
   const seatsDiv = document.getElementById("seats");
   seatsDiv.innerHTML = "";
-  for (const s of seats) {
-    const span = document.createElement("span");
-    let cls = "seat";
-    if (!s.connected) cls += " disconnected";
-    if (s.seat === currentTurn && gamePhase === "playing") cls += " active";
-    if (s.seat === mySeat) cls += " me";
-    span.className = cls;
-    let label = `[${s.seat}] ${s.nickname}`;
-    if (s.seat === hostSeat) label += " ★";
-    if (s.seat === mySeat)   label += " (you)";
-    if (!s.connected)        label += " (offline)";
-    span.textContent = label;
-    seatsDiv.appendChild(span);
-  }
 
-  // Hand
+  // Group by team. Show Team 0 row, then Team 1 row.
+  for (const team of [0, 1]) {
+    const row = document.createElement("div");
+    row.className = `team-row team-bg-${team}`;
+    const label = document.createElement("strong");
+    label.className = `team-${team}`;
+    label.textContent = `Team ${team}: `;
+    row.appendChild(label);
+
+    const inTeam = seats.filter(s => teamForSeat(s.seat) === team);
+    if (inTeam.length === 0) {
+      const empty = document.createElement("em");
+      empty.style.color = "#888";
+      empty.textContent = "(no players yet)";
+      row.appendChild(empty);
+    } else {
+      for (const s of inTeam) {
+        const span = document.createElement("span");
+        let cls = "seat";
+        if (!s.connected)                                cls += " disconnected";
+        if (s.seat === currentTurn && gamePhase === "playing") cls += " active";
+        if (s.seat === mySeat)                           cls += " me";
+        span.className = cls;
+        let txt = `[${s.seat}] ${s.nickname}`;
+        if (s.seat === hostSeat) txt += " ★";
+        if (s.seat === mySeat)   txt += " (you)";
+        if (!s.connected)        txt += " (offline)";
+        span.textContent = txt;
+        row.appendChild(span);
+      }
+    }
+    seatsDiv.appendChild(row);
+  }
+};
+
+const renderHand = () => {
   const handDiv = document.getElementById("hand");
   if (gamePhase === "lobby") {
     handDiv.innerHTML = '<em style="color:#888">game hasn\'t started yet</em>';
-  } else if (myHand.length === 0) {
+    return;
+  }
+  if (myHand.length === 0) {
     handDiv.innerHTML = '<em style="color:#888">empty hand — request snapshot to refresh</em>';
+    return;
+  }
+  handDiv.innerHTML = "";
+  myHand.forEach((c, i) => {
+    const div = document.createElement("span");
+    let cls = "card";
+    if (isRedSuit(c.suit)) cls += " red";
+    if (isWild(c.rank))    cls += " wild";
+    div.className = cls;
+    div.innerHTML = `<span class="card-idx">${i}</span>${cardLabel(c)}`;
+    handDiv.appendChild(div);
+  });
+};
+
+const renderTable = () => {
+  const fs = document.getElementById("table-fs");
+  if (gamePhase !== "playing" && gamePhase !== "ended") {
+    fs.style.display = "none";
+    return;
+  }
+  if (!snapshot) {
+    fs.style.display = "none";
+    return;
+  }
+  fs.style.display = "";
+
+  // Banner
+  const bannerEl = document.getElementById("turn-banner");
+  if (gamePhase === "playing" && currentTurn !== null) {
+    const t = teamForSeat(currentTurn);
+    bannerEl.innerHTML =
+      `<span class="team-${t}"><strong>${nicknameForSeat(currentTurn)}'s turn</strong> ` +
+      `(seat ${currentTurn}, Team ${t})</span>`;
   } else {
-    handDiv.innerHTML = "";
-    myHand.forEach((c, i) => {
-      const div = document.createElement("span");
-      const isRed = c.suit === "♥" || c.suit === "♦";
-      div.className = "card" + (isRed ? " red" : "");
-      div.innerHTML = `<span class="card-idx">${i}</span>${c.rank} ${c.suit}`;
-      handDiv.appendChild(div);
+    bannerEl.textContent = "";
+  }
+
+  // Counts row
+  const total = snapshot.config?.reserves_per_team ?? 0;
+  const r0 = total - (snapshot.reserves_remaining?.[0] ?? 0);
+  const r1 = total - (snapshot.reserves_remaining?.[1] ?? 0);
+  document.getElementById("counts").innerHTML =
+    `<strong>Deck:</strong> ${snapshot.deck_remaining ?? 0} cards &nbsp;|&nbsp; ` +
+    `<strong>Reserves used:</strong> ` +
+    `<span class="team-0">T0 ${r0}/${total}</span> &nbsp; ` +
+    `<span class="team-1">T1 ${r1}/${total}</span> &nbsp;|&nbsp; ` +
+    `<strong>Hand counts:</strong> ` +
+    Object.entries(snapshot.hand_counts ?? {})
+      .map(([sid, n]) => `<span class="team-${teamForSeat(+sid)}">${nicknameForSeat(+sid)}=${n}</span>`)
+      .join(" · ");
+
+  // Trash
+  const trashEl = document.getElementById("trash");
+  trashEl.innerHTML = "";
+  if (!snapshot.trash || snapshot.trash.length === 0) {
+    trashEl.innerHTML = '<em style="color:#888">(empty)</em>';
+  } else {
+    snapshot.trash.forEach(c => {
+      const sp = document.createElement("span");
+      sp.className = "meld-card" + (isRedSuit(c.suit) ? " red" : "");
+      sp.textContent = cardLabel(c);
+      trashEl.appendChild(sp);
+      trashEl.appendChild(document.createTextNode(" "));
     });
   }
 
-  // Buttons
+  // Melds, per team
+  for (const team of [0, 1]) {
+    const div = document.getElementById(`team-${team}-melds`);
+    div.innerHTML = `<strong class="team-${team}">[Team ${team} melds]</strong> `;
+    const melds = snapshot.melds?.[team] ?? [];
+    if (melds.length === 0) {
+      const em = document.createElement("em");
+      em.style.color = "#888";
+      em.textContent = "(no melds)";
+      div.appendChild(em);
+    } else {
+      melds.forEach(m => {
+        const meldEl = document.createElement("span");
+        meldEl.className = `meld team-bg-${team}`;
+        m.cards.forEach(c => {
+          const sp = document.createElement("span");
+          sp.className = "meld-card" + (isRedSuit(c.suit) ? " red" : "");
+          sp.textContent = cardLabel(c);
+          meldEl.appendChild(sp);
+        });
+        if (m.permanent_dirty) {
+          const flag = document.createElement("span");
+          flag.className = "dirty";
+          flag.textContent = "[dirty]";
+          meldEl.appendChild(flag);
+        }
+        div.appendChild(meldEl);
+      });
+    }
+  }
+};
+
+const renderButtons = () => {
   const isHost  = mySeat === hostSeat;
   const myTurn  = gamePhase === "playing" && currentTurn === mySeat;
-  document.getElementById("start-btn").disabled        = !(isHost && gamePhase === "lobby");
-  document.getElementById("rematch-btn").disabled      = !(isHost && gamePhase === "ended");
+  document.getElementById("start-btn").disabled         = !(isHost && gamePhase === "lobby");
+  document.getElementById("rematch-btn").disabled       = !(isHost && gamePhase === "ended");
   document.getElementById("submit-action-btn").disabled = !myTurn;
   document.getElementById("action-input").disabled      = !myTurn;
 };
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // WebSocket lifecycle.
-// ---------------------------------------------------------------------------
+// ===========================================================================
 const connectWs = (code) => {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/room/${code}`);
@@ -192,6 +390,7 @@ const handleMessage = (m) => {
     case "welcome":
       mySeat    = m.seat;
       hostSeat  = m.room.host_seat;
+      teamMode  = m.room.team_mode ?? "by_join_order";
       gamePhase = m.room.phase;
       seats     = m.room.seats;
       break;
@@ -199,6 +398,7 @@ const handleMessage = (m) => {
       seats = m.seats;
       break;
     case "snapshot":
+      snapshot     = m.snapshot;
       gamePhase    = m.snapshot.phase;
       currentTurn  = m.snapshot.current_turn?.player_id ?? null;
       myHand       = m.snapshot.own_hand ?? [];
@@ -207,11 +407,10 @@ const handleMessage = (m) => {
       handleEvent(m.event);
       break;
     case "accepted":
-      // After my own action lands, refresh my hand via a snapshot request.
+      // Refresh snapshot after my own action lands.
       requestSnapshot();
       break;
     case "rejected":
-      // Surfaced in the log; no state change.
       break;
     case "room_closed":
       gamePhase = "ended";
@@ -222,11 +421,12 @@ const handleMessage = (m) => {
 const handleEvent = (ev) => {
   if (ev.type === "turn_advanced") {
     currentTurn = ev.next_player_id;
+    // Other players' actions also affect table state — refresh on every TurnAdvanced.
+    requestSnapshot();
   } else if (ev.type === "game_ended") {
     gamePhase = "ended";
+    requestSnapshot();
   }
-  // Other event types (card_drawn, discarded, meld_*, etc.) update the
-  // authoritative state — we'll resync via the snapshot triggered on accepted.
 };
 
 const send = (msg) => {
@@ -236,19 +436,33 @@ const send = (msg) => {
 };
 const requestSnapshot = () => send({ type: "request_snapshot" });
 
-// ---------------------------------------------------------------------------
-// Form wiring.
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Lobby form wiring.
+// ===========================================================================
+
+// Toggle host_team radio when the create form's team_mode changes.
+document.querySelector('select[name="team_mode"]').addEventListener("change", (e) => {
+  document.getElementById("host-team-row").style.display =
+    e.target.value === "by_choice" ? "" : "none";
+});
+
 document.getElementById("create-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
+  const tm = fd.get("team_mode");
   const body = {
     nickname: fd.get("nickname"),
     num_players: Number(fd.get("num_players")),
     num_decks: Number(fd.get("num_decks")),
     reserves_per_team: Number(fd.get("reserves_per_team")),
     timer_enabled: fd.get("timer_enabled") === "on",
+    team_mode: tm,
   };
+  if (tm === "by_choice") {
+    const ht = fd.get("host_team");
+    if (ht === null) { log("by_choice: pick a team for yourself"); return; }
+    body.host_team = Number(ht);
+  }
   const r = await fetch("/rooms", { method: "POST", credentials: "include",
     headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
@@ -256,30 +470,51 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
   if (j.room_code) connectWs(j.room_code);
 });
 
+// Join form: two-step lookup → submit
+document.getElementById("lookup-btn").addEventListener("click", async () => {
+  const code = document.querySelector('input[name="code"]').value.trim().toUpperCase();
+  if (!code) { log("enter a room code first"); return; }
+  const r = await fetch(`/rooms/${code}`);
+  if (r.status !== 200) {
+    log("lookup failed:", r.status, await r.text());
+    return;
+  }
+  const info = await r.json();
+  log("room info", info);
+  document.getElementById("join-details").style.display = "";
+  const desc = `Room ${info.code}: ${info.config.num_players}-player, ` +
+    `${info.seats.length}/${info.config.num_players} seats taken, ` +
+    `team mode = ${info.team_mode}`;
+  document.getElementById("join-room-info").textContent = desc;
+  document.getElementById("join-team-row").style.display =
+    info.team_mode === "by_choice" ? "" : "none";
+});
+
 document.getElementById("join-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
-  const code = fd.get("code");
+  const code = fd.get("code").trim().toUpperCase();
+  const body = { nickname: fd.get("nickname") };
+  const team = fd.get("team");
+  if (team !== null) body.team = Number(team);
   const r = await fetch(`/rooms/${code}`, { method: "POST", credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ nickname: fd.get("nickname") }) });
+    headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
   log("joined", j);
   if (typeof j.seat === "number") connectWs(code);
 });
 
+// ===========================================================================
+// Game-action button wiring.
+// ===========================================================================
 document.getElementById("start-btn").onclick    = () => send({ type: "start_game" });
 document.getElementById("rematch-btn").onclick  = () => send({ type: "rematch" });
 document.getElementById("snapshot-btn").onclick = () => requestSnapshot();
 document.getElementById("submit-action-btn").onclick = () => {
   const raw = document.getElementById("action-input").value;
   let action;
-  try {
-    action = JSON.parse(raw);
-  } catch (err) {
-    log("bad JSON:", err.message);
-    return;
-  }
+  try { action = JSON.parse(raw); }
+  catch (err) { log("bad JSON:", err.message); return; }
   if (typeof action.player_id !== "number") action.player_id = mySeat;
   send({ type: "submit_action", action });
 };
