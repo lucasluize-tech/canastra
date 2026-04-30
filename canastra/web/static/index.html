@@ -32,18 +32,36 @@
 
   /* Hand */
   #hand { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0; }
-  .card { padding: 0.3rem 0.5rem; border: 1px solid #999; border-radius: 6px; background: #fff; font-size: 14px; min-width: 2.4rem; text-align: center; }
+  .card { padding: 0.3rem 0.5rem; border: 1px solid #999; border-radius: 6px; background: #fff; font-size: 14px; min-width: 2.4rem; text-align: center; cursor: pointer; user-select: none; }
+  .card:hover:not(.disabled) { background: #f4f4f4; }
   .card.red { color: #c33; }
   .card.wild { background: #efe; border-color: #6a6; }
+  .card.selected { background: #ffe066; border-color: #d49b00; box-shadow: 0 0 0 2px #d49b00; }
+  .card.disabled { cursor: not-allowed; opacity: 0.7; }
   .card-idx { color: #888; font-size: 10px; display: block; }
 
   /* Table */
   .table-row { margin: 0.25rem 0; }
-  .meld { display: inline-flex; flex-wrap: wrap; gap: 0.15rem; padding: 0.25rem 0.4rem; border-radius: 4px; margin: 0.15rem 0.25rem 0.15rem 0; vertical-align: middle; }
+  .meld { display: inline-flex; flex-wrap: wrap; gap: 0.15rem; padding: 0.25rem 0.4rem; border-radius: 4px; margin: 0.15rem 0.25rem 0.15rem 0; vertical-align: middle; cursor: pointer; }
+  .meld:hover { filter: brightness(0.95); }
+  .meld.selected { box-shadow: 0 0 0 2px #d49b00; }
   .meld-card { padding: 0.1rem 0.3rem; background: #fff; border: 1px solid #aaa; border-radius: 3px; font-size: 13px; }
   .meld-card.red { color: #c33; }
   .dirty { font-size: 11px; color: #844; margin-left: 0.4rem; }
   .trash { background: #faf6e8; padding: 0.4rem; border-radius: 4px; border: 1px dashed #aa9; }
+
+  /* Action buttons */
+  #actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+  #actions button { padding: 0.4rem 0.7rem; }
+  .action-hint { font-size: 12px; color: #666; margin-left: 0.5rem; }
+  .action-group { padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 0.4rem; }
+  .action-group.draw  { background: #f0f5fa; }
+  .action-group.play  { background: #f5f0e8; }
+  .selection-info { font-size: 12px; color: #555; margin: 0.3rem 0; }
+
+  details { margin-top: 0.5rem; }
+  details summary { cursor: pointer; padding: 0.3rem 0; user-select: none; }
+  details pre { font-size: 11px; max-height: none; }
 </style>
 </head>
 <body>
@@ -128,18 +146,60 @@
 
   <!-- Your hand -->
   <div style="margin-top: 0.75rem;">
-    <strong>Your hand:</strong>
+    <strong>Your hand:</strong> <span class="action-hint">click a card to select / deselect</span>
     <div id="hand"><em style="color:#888">no snapshot yet</em></div>
+    <div class="selection-info" id="selection-info"></div>
   </div>
 
-  <!-- Action input -->
+  <!-- Action buttons — phase-aware -->
   <div style="margin-top: 0.75rem;">
+    <strong>Actions:</strong>
+
+    <div class="action-group draw" id="draw-group">
+      <em style="font-size: 12px; color: #555;">DRAW phase — pick one:</em><br>
+      <button id="btn-draw">Draw from deck</button>
+      <button id="btn-pickup">Pick up trash</button>
+    </div>
+
+    <div class="action-group play" id="play-group">
+      <em style="font-size: 12px; color: #555;">PLAY phase — meld &amp; discard:</em><br>
+      <button id="btn-create-meld">Create meld <span class="action-hint">(needs 3+ selected cards)</span></button>
+      <button id="btn-extend-meld">Extend meld <span class="action-hint">(click a meld + 1+ cards)</span></button>
+      <button id="btn-discard">Discard <span class="action-hint">(exactly 1 selected card)</span></button>
+      <button id="btn-chin">Chin <span class="action-hint">(end the round)</span></button>
+    </div>
+  </div>
+
+  <!-- Advanced raw JSON input (fallback) -->
+  <details style="margin-top: 0.5rem;">
+    <summary>Advanced: send raw JSON action</summary>
     <textarea id="action-input" rows="3" cols="80"
       placeholder='{"type":"draw","player_id":0}'></textarea>
     <br>
-    <button id="submit-action-btn" disabled>Submit action</button>
+    <button id="submit-action-btn" disabled>Submit raw action</button>
     <small style="color:#666;">player_id is overwritten server-side; you can leave it 0.</small>
-  </div>
+  </details>
+
+  <!-- JSON cheatsheet -->
+  <details style="margin-top: 0.5rem;">
+    <summary>Action JSON cheatsheet</summary>
+<pre>// All actions are wrapped in:
+{"v":1, "client_msg_id":"&lt;uuid&gt;", "msg":{"type":"submit_action", "action":{ ...action below... }}}
+
+// Cards: {"suit": "♥"|"♦"|"♣"|"♠", "rank": 2..10 | "Ace" | "Jack" | "Queen" | "King"}
+
+// DRAW phase:
+{"type":"draw"}                                           // draw 1 from deck
+{"type":"pickup_trash"}                                   // pick up entire trash pile
+
+// PLAY phase:
+{"type":"create_meld", "cards":[ &lt;card&gt;, &lt;card&gt;, ... ]}    // 3+ same-suit cards (rank 2 = wild)
+{"type":"extend_meld", "meld_id":"&lt;uuid&gt;", "cards":[...]} // add 1+ cards to an existing meld
+{"type":"discard", "card": &lt;card&gt;}                       // ends your turn
+{"type":"chin"}                                           // voluntary game end
+
+// player_id is added server-side from your session — you can omit it.</pre>
+  </details>
 </fieldset>
 
 <h2>Event log</h2>
@@ -154,10 +214,28 @@ let mySeat = null;
 let hostSeat = null;
 let teamMode = "by_join_order";
 let gamePhase = "lobby";          // "lobby" | "playing" | "ended"
+let turnPhase = null;             // engine TurnState.phase: "waiting_draw" | "playing" | "ended"
 let currentTurn = null;
 let seats = [];                   // [{seat, nickname, connected}]
-let myHand = [];                  // [{suit, rank}]
+let myHand = [];                  // [{suit, rank}] — original order from snapshot
+let displayHand = [];             // [{suit, rank}] — sorted for display
 let snapshot = null;              // most recent PlayerView; drives the table render
+let selectedHandIndices = new Set();  // indices into displayHand
+let selectedMeldId = null;            // meld UUID, or null
+
+// Suit + rank ordering for hand display.
+const SUIT_ORDER = { "♥": 0, "♦": 1, "♣": 2, "♠": 3 };
+const FACE_RANKS = { "Jack": 11, "Queen": 12, "King": 13 };
+const rankSortKey = (rank) => {
+  if (rank === 2)        return 0;          // wilds first
+  if (rank === "Ace")    return 1;          // then Ace (low)
+  if (typeof rank === "number") return rank; // 3..10
+  return FACE_RANKS[rank] ?? 99;            // J/Q/K
+};
+const sortHand = (cards) => [...cards].sort((a, b) => {
+  const ds = (SUIT_ORDER[a.suit] ?? 9) - (SUIT_ORDER[b.suit] ?? 9);
+  return ds !== 0 ? ds : rankSortKey(a.rank) - rankSortKey(b.rank);
+});
 
 // ===========================================================================
 // Logging helper.
@@ -258,22 +336,47 @@ const renderHand = () => {
   const handDiv = document.getElementById("hand");
   if (gamePhase === "lobby") {
     handDiv.innerHTML = '<em style="color:#888">game hasn\'t started yet</em>';
+    document.getElementById("selection-info").textContent = "";
     return;
   }
-  if (myHand.length === 0) {
+  if (displayHand.length === 0) {
     handDiv.innerHTML = '<em style="color:#888">empty hand — request snapshot to refresh</em>';
+    document.getElementById("selection-info").textContent = "";
     return;
   }
+  const myTurn = gamePhase === "playing" && currentTurn === mySeat;
   handDiv.innerHTML = "";
-  myHand.forEach((c, i) => {
+  displayHand.forEach((c, i) => {
     const div = document.createElement("span");
     let cls = "card";
-    if (isRedSuit(c.suit)) cls += " red";
-    if (isWild(c.rank))    cls += " wild";
+    if (isRedSuit(c.suit))               cls += " red";
+    if (isWild(c.rank))                  cls += " wild";
+    if (selectedHandIndices.has(i))      cls += " selected";
+    if (!myTurn)                         cls += " disabled";
     div.className = cls;
     div.innerHTML = `<span class="card-idx">${i}</span>${cardLabel(c)}`;
+    if (myTurn) {
+      div.addEventListener("click", () => {
+        if (selectedHandIndices.has(i)) selectedHandIndices.delete(i);
+        else                            selectedHandIndices.add(i);
+        render();
+      });
+    }
     handDiv.appendChild(div);
   });
+
+  // Selection info line.
+  const info = document.getElementById("selection-info");
+  const parts = [];
+  if (selectedHandIndices.size > 0) {
+    const selectedCards = [...selectedHandIndices].sort((a, b) => a - b)
+      .map(i => cardLabel(displayHand[i]));
+    parts.push(`Selected cards (${selectedHandIndices.size}): ${selectedCards.join(", ")}`);
+  }
+  if (selectedMeldId) {
+    parts.push(`Selected meld: ${selectedMeldId.slice(0, 8)}…`);
+  }
+  info.textContent = parts.join("  ·  ");
 };
 
 const renderTable = () => {
@@ -339,9 +442,13 @@ const renderTable = () => {
       em.textContent = "(no melds)";
       div.appendChild(em);
     } else {
+      const myTurn = gamePhase === "playing" && currentTurn === mySeat;
       melds.forEach(m => {
         const meldEl = document.createElement("span");
-        meldEl.className = `meld team-bg-${team}`;
+        let cls = `meld team-bg-${team}`;
+        if (m.id === selectedMeldId) cls += " selected";
+        meldEl.className = cls;
+        meldEl.title = `meld id: ${m.id}`;
         m.cards.forEach(c => {
           const sp = document.createElement("span");
           sp.className = "meld-card" + (isRedSuit(c.suit) ? " red" : "");
@@ -353,6 +460,13 @@ const renderTable = () => {
           flag.className = "dirty";
           flag.textContent = "[dirty]";
           meldEl.appendChild(flag);
+        }
+        // Only allow selecting melds on YOUR team during YOUR turn (extend on own team only).
+        if (myTurn && team === teamForSeat(mySeat)) {
+          meldEl.addEventListener("click", () => {
+            selectedMeldId = (selectedMeldId === m.id) ? null : m.id;
+            render();
+          });
         }
         div.appendChild(meldEl);
       });
@@ -367,6 +481,23 @@ const renderButtons = () => {
   document.getElementById("rematch-btn").disabled       = !(isHost && gamePhase === "ended");
   document.getElementById("submit-action-btn").disabled = !myTurn;
   document.getElementById("action-input").disabled      = !myTurn;
+
+  // Phase-aware action group visibility.
+  const drawGroup = document.getElementById("draw-group");
+  const playGroup = document.getElementById("play-group");
+  drawGroup.style.opacity = (myTurn && turnPhase === "waiting_draw") ? "1" : "0.5";
+  playGroup.style.opacity = (myTurn && turnPhase === "playing") ? "1" : "0.5";
+
+  const inDraw = myTurn && turnPhase === "waiting_draw";
+  const inPlay = myTurn && turnPhase === "playing";
+  const nSel = selectedHandIndices.size;
+
+  document.getElementById("btn-draw").disabled        = !inDraw;
+  document.getElementById("btn-pickup").disabled      = !inDraw;
+  document.getElementById("btn-create-meld").disabled = !(inPlay && nSel >= 3);
+  document.getElementById("btn-extend-meld").disabled = !(inPlay && nSel >= 1 && selectedMeldId);
+  document.getElementById("btn-discard").disabled     = !(inPlay && nSel === 1);
+  document.getElementById("btn-chin").disabled        = !inPlay;
 };
 
 // ===========================================================================
@@ -404,7 +535,12 @@ const handleMessage = (m) => {
       // Room phase for UI: any non-"ended" engine phase means the game is live.
       gamePhase    = m.snapshot.phase === "ended" ? "ended" : "playing";
       currentTurn  = m.snapshot.current_turn?.player_id ?? null;
+      turnPhase    = m.snapshot.current_turn?.phase ?? null;
       myHand       = m.snapshot.own_hand ?? [];
+      displayHand  = sortHand(myHand);
+      // Reset selections — hand contents and meld set may have changed.
+      selectedHandIndices = new Set();
+      selectedMeldId = null;
       break;
     case "event":
       handleEvent(m.event);
@@ -424,7 +560,9 @@ const handleMessage = (m) => {
 const handleEvent = (ev) => {
   if (ev.type === "turn_advanced") {
     currentTurn = ev.next_player_id;
-    // Other players' actions also affect table state — refresh on every TurnAdvanced.
+    // New turn always starts in the draw phase.
+    turnPhase = "waiting_draw";
+    // Other players' actions also affect table state — refresh.
     requestSnapshot();
   } else if (ev.type === "game_ended") {
     gamePhase = "ended";
@@ -520,6 +658,37 @@ document.getElementById("submit-action-btn").onclick = () => {
   catch (err) { log("bad JSON:", err.message); return; }
   if (typeof action.player_id !== "number") action.player_id = mySeat;
   send({ type: "submit_action", action });
+};
+
+// ---------------------------------------------------------------------------
+// Phase-aware action builders. Server overwrites player_id from the session,
+// so we omit it here.
+// ---------------------------------------------------------------------------
+const submitAction = (action) => send({ type: "submit_action", action });
+const selectedCards = () =>
+  [...selectedHandIndices].sort((a, b) => a - b).map(i => displayHand[i]);
+
+document.getElementById("btn-draw").onclick    = () => submitAction({ type: "draw" });
+document.getElementById("btn-pickup").onclick  = () => submitAction({ type: "pickup_trash" });
+document.getElementById("btn-chin").onclick    = () => submitAction({ type: "chin" });
+
+document.getElementById("btn-create-meld").onclick = () => {
+  const cards = selectedCards();
+  if (cards.length < 3) { log("create_meld needs 3+ selected cards"); return; }
+  submitAction({ type: "create_meld", cards });
+};
+
+document.getElementById("btn-extend-meld").onclick = () => {
+  const cards = selectedCards();
+  if (!selectedMeldId)   { log("click a meld in the table first"); return; }
+  if (cards.length < 1)  { log("extend_meld needs 1+ selected cards"); return; }
+  submitAction({ type: "extend_meld", meld_id: selectedMeldId, cards });
+};
+
+document.getElementById("btn-discard").onclick = () => {
+  const cards = selectedCards();
+  if (cards.length !== 1) { log("discard needs exactly 1 selected card"); return; }
+  submitAction({ type: "discard", card: cards[0] });
 };
 
 render();

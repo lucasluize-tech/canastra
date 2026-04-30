@@ -27,7 +27,11 @@ def test_sign_then_verify_round_trip():
 def test_verify_rejects_tampered_cookie():
     sid = new_session_id()
     blob = sign_cookie(sid, SECRET)
-    tampered = blob[:-1] + ("A" if blob[-1] != "A" else "B")
+    # Replace the entire signature segment with a bogus one. Single-char
+    # tampering of base64 is unreliable: when the changed byte falls on
+    # an unused-bit boundary of the base64 group, the decoded HMAC bytes
+    # are unchanged and the cookie still verifies.
+    tampered = blob.rsplit(".", 1)[0] + ".AAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     assert verify_cookie(tampered, SECRET, max_age=3600) is None
 
 
