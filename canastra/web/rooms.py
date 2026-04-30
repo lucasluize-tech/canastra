@@ -46,12 +46,16 @@ class Unavailable(Exception):
     """Single sentinel for "no such room / full / started / invalid nickname"."""
 
 
+TeamMode = Literal["by_join_order", "by_choice"]
+
+
 @dataclass
 class Room:
     code: str
     config: GameConfig
     host_seat: int
     seats: dict[int, SessionBinding]
+    team_mode: TeamMode = "by_join_order"
     state: GameState | None = None
     phase: Literal["lobby", "playing", "ended"] = "lobby"
     timer_task: asyncio.Task[None] | None = None
@@ -151,6 +155,7 @@ class Room:
             host_seat=self.host_seat,
             config=self.config,
             phase=self.phase,
+            team_mode=self.team_mode,
             seats=[
                 SeatInfo(seat=s, nickname=b.nickname, connected=b.ws is not None)
                 for s, b in sorted(self.seats.items())
@@ -244,34 +249,84 @@ class RoomManager:
         if not NICKNAME_RE.match(nickname):
             raise Unavailable
 
-    def create(self, *, host_nickname: str, config: GameConfig) -> tuple[Room, SessionBinding]:
+    def create(
+        self,
+        *,
+        host_nickname: str,
+        config: GameConfig,
+        team_mode: TeamMode = "by_join_order",
+        host_team: int | None = None,
+    ) -> tuple[Room, SessionBinding]:
         self._validate_nickname(host_nickname)
+        if team_mode == "by_choice":
+            if host_team not in (0, 1):
+                raise Unavailable  # team_required: host must pick a team in by_choice mode
+            host_seat = host_team  # 0→seat 0 (team 0), 1→seat 1 (team 1)
+        else:
+            host_seat = 0
+
         code = self._generate_unique_code()
-        binding = self.sessions.new(room_code=code, seat=0, nickname=host_nickname)
+        binding = self.sessions.new(room_code=code, seat=host_seat, nickname=host_nickname)
         room = Room(
             code=code,
             config=config,
-            host_seat=0,
-            seats={0: binding},
+            host_seat=host_seat,
+            seats={host_seat: binding},
+            team_mode=team_mode,
             _rng=random.Random(config.seed),
         )
         self.rooms[code] = room
         return room, binding
 
-    def join(self, *, code: str, nickname: str) -> tuple[Room, SessionBinding]:
+    def join(
+        self,
+        *,
+        code: str,
+        nickname: str,
+        team: int | None = None,
+    ) -> tuple[Room, SessionBinding]:
         self._validate_nickname(nickname)
         room = self.rooms.get(code)
         if room is None or room.phase != "lobby":
             raise Unavailable
         if len(room.seats) >= room.config.num_players:
             raise Unavailable
-        next_seat = max(room.seats) + 1
+
+        if room.team_mode == "by_choice":
+            if team not in (0, 1):
+                raise Unavailable  # team required + must be 0 or 1
+            next_seat = _next_seat_for_team(room, team)
+        else:
+            # by_join_order: ignore team, take next free seat sequentially.
+            next_seat = _next_free_seat(room)
+
         binding = self.sessions.new(room_code=code, seat=next_seat, nickname=nickname)
         room.seats[next_seat] = binding
         return room, binding
 
     def get(self, code: str) -> Room | None:
         return self.rooms.get(code)
+
+
+def _next_free_seat(room: Room) -> int:
+    """Smallest unused seat index in [0, num_players). Assumes room is not full."""
+    occupied = set(room.seats)
+    for s in range(room.config.num_players):
+        if s not in occupied:
+            return s
+    raise Unavailable  # caller already checked, so this is defensive only
+
+
+def _next_seat_for_team(room: Room, team: int) -> int:
+    """Smallest unused seat with parity matching ``team``. Raises Unavailable if team is full.
+
+    Engine maps even seats → team 0 and odd seats → team 1 (seat parity).
+    """
+    occupied = set(room.seats)
+    for s in range(room.config.num_players):
+        if s not in occupied and s % 2 == team:
+            return s
+    raise Unavailable  # that team has no free seats
 
 
 async def _lobby_grace(room: Room, timeout: float) -> None:

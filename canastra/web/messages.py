@@ -69,6 +69,7 @@ class RoomPublic(BaseModel):
     host_seat: int
     config: GameConfig
     phase: Literal["lobby", "playing", "ended"]
+    team_mode: Literal["by_join_order", "by_choice"] = "by_join_order"
     seats: list[SeatInfo]
 
 
