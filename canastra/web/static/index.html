@@ -6,14 +6,31 @@
 <style>
   body { font-family: ui-monospace, monospace; margin: 1rem; max-width: 960px; }
   fieldset { margin-bottom: 1rem; }
-  pre { background: #111; color: #eee; padding: 0.75rem; max-height: 60vh; overflow: auto; }
-  input, button, select { font: inherit; }
-  .seat { padding: 0.25rem 0.5rem; border-radius: 6px; background: #eef; margin-right: 0.25rem; }
-  .seat.disconnected { background: #fee; }
+  pre { background: #111; color: #eee; padding: 0.75rem; max-height: 40vh; overflow: auto; font-size: 12px; }
+  input, button, select, textarea { font: inherit; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #status { padding: 0.6rem 0.8rem; border-radius: 6px; margin-bottom: 0.75rem; font-weight: 600; }
+  .status-lobby   { background: #eef; color: #224; }
+  .status-myturn  { background: #cfa; color: #163; }
+  .status-waiting { background: #fed; color: #642; }
+  .status-ended   { background: #ddd; color: #333; }
+
+  .seat { padding: 0.25rem 0.5rem; border-radius: 6px; background: #eef; margin-right: 0.25rem; display: inline-block; margin-bottom: 0.25rem; }
+  .seat.disconnected { background: #fee; color: #844; }
+  .seat.active { background: #ffe066; color: #443; box-shadow: 0 0 0 2px #d49b00; }
+  .seat.me { outline: 2px dashed #339; }
+
+  #hand { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0; }
+  .card { padding: 0.3rem 0.5rem; border: 1px solid #999; border-radius: 6px; background: #fff; font-size: 14px; }
+  .card.red { color: #c33; }
+  .card-idx { color: #888; font-size: 10px; display: block; }
 </style>
 </head>
 <body>
 <h1>canastra — Phase 4 test harness</h1>
+
+<div id="status" class="status-lobby">not connected</div>
 
 <fieldset id="join-fs">
   <legend>Lobby</legend>
@@ -35,49 +52,181 @@
 <fieldset id="play-fs" disabled>
   <legend>Connection</legend>
   <div id="seats"></div>
-  <button id="start-btn">Start game</button>
-  <button id="rematch-btn">Rematch</button>
-  <button id="snapshot-btn">Request snapshot</button>
-  <textarea id="action-input" rows="3" cols="80"
-    placeholder='{"type":"draw","player_id":0}'></textarea>
-  <button id="submit-action-btn">Submit action</button>
+  <div style="margin: 0.5rem 0;">
+    <button id="start-btn" disabled>Start game</button>
+    <button id="rematch-btn" disabled>Rematch</button>
+    <button id="snapshot-btn">Request snapshot</button>
+  </div>
+
+  <div>
+    <strong>Your hand:</strong>
+    <div id="hand"><em style="color:#888">no snapshot yet</em></div>
+  </div>
+
+  <div style="margin-top: 0.75rem;">
+    <textarea id="action-input" rows="3" cols="80"
+      placeholder='{"type":"draw","player_id":0}'></textarea>
+    <br>
+    <button id="submit-action-btn" disabled>Submit action</button>
+    <small style="color:#666;">player_id is overwritten server-side; you can leave it 0.</small>
+  </div>
 </fieldset>
 
 <h2>Event log</h2>
 <pre id="log"></pre>
 
 <script>
-const log = (...args) => {
-  const ts = new Date().toISOString().split("T")[1].slice(0,8);
-  document.getElementById("log").textContent += `[${ts}] ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}\n`;
-};
-const newId = () => crypto.randomUUID();
+// ---------------------------------------------------------------------------
+// Client state — minimal mirror of the server view.
+// ---------------------------------------------------------------------------
 let ws = null;
 let mySeat = null;
+let hostSeat = null;
+let gamePhase = "lobby";          // "lobby" | "playing" | "ended"
+let currentTurn = null;           // PlayerId | null
+let seats = [];                   // [{seat, nickname, connected}]
+let myHand = [];                  // [{suit, rank}]
 
+// ---------------------------------------------------------------------------
+// Logging helper.
+// ---------------------------------------------------------------------------
+const log = (...args) => {
+  const ts = new Date().toISOString().split("T")[1].slice(0,8);
+  document.getElementById("log").textContent +=
+    `[${ts}] ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}\n`;
+  const el = document.getElementById("log");
+  el.scrollTop = el.scrollHeight;
+};
+const newId = () => crypto.randomUUID();
+const nicknameForSeat = (s) => seats.find(x => x.seat === s)?.nickname ?? `seat ${s}`;
+
+// ---------------------------------------------------------------------------
+// Render — recompute UI from client state. Called after every state change.
+// ---------------------------------------------------------------------------
+const render = () => {
+  // Status banner
+  const status = document.getElementById("status");
+  status.className = "";
+  if (gamePhase === "lobby") {
+    status.className = "status-lobby";
+    status.textContent = mySeat === hostSeat
+      ? "Lobby — you're the host. Wait for everyone to join, then click Start game."
+      : `Lobby — waiting for host (${nicknameForSeat(hostSeat)}) to start.`;
+  } else if (gamePhase === "playing") {
+    if (currentTurn === mySeat) {
+      status.className = "status-myturn";
+      status.textContent = "▶ Your turn — submit an action.";
+    } else {
+      status.className = "status-waiting";
+      status.textContent = `Waiting for ${nicknameForSeat(currentTurn)} (seat ${currentTurn}) to play…`;
+    }
+  } else if (gamePhase === "ended") {
+    status.className = "status-ended";
+    status.textContent = mySeat === hostSeat
+      ? "Game ended — click Rematch to deal a new hand."
+      : "Game ended — waiting for host to start a rematch.";
+  }
+
+  // Seats
+  const seatsDiv = document.getElementById("seats");
+  seatsDiv.innerHTML = "";
+  for (const s of seats) {
+    const span = document.createElement("span");
+    let cls = "seat";
+    if (!s.connected) cls += " disconnected";
+    if (s.seat === currentTurn && gamePhase === "playing") cls += " active";
+    if (s.seat === mySeat) cls += " me";
+    span.className = cls;
+    let label = `[${s.seat}] ${s.nickname}`;
+    if (s.seat === hostSeat) label += " ★";
+    if (s.seat === mySeat)   label += " (you)";
+    if (!s.connected)        label += " (offline)";
+    span.textContent = label;
+    seatsDiv.appendChild(span);
+  }
+
+  // Hand
+  const handDiv = document.getElementById("hand");
+  if (gamePhase === "lobby") {
+    handDiv.innerHTML = '<em style="color:#888">game hasn\'t started yet</em>';
+  } else if (myHand.length === 0) {
+    handDiv.innerHTML = '<em style="color:#888">empty hand — request snapshot to refresh</em>';
+  } else {
+    handDiv.innerHTML = "";
+    myHand.forEach((c, i) => {
+      const div = document.createElement("span");
+      const isRed = c.suit === "♥" || c.suit === "♦";
+      div.className = "card" + (isRed ? " red" : "");
+      div.innerHTML = `<span class="card-idx">${i}</span>${c.rank} ${c.suit}`;
+      handDiv.appendChild(div);
+    });
+  }
+
+  // Buttons
+  const isHost  = mySeat === hostSeat;
+  const myTurn  = gamePhase === "playing" && currentTurn === mySeat;
+  document.getElementById("start-btn").disabled        = !(isHost && gamePhase === "lobby");
+  document.getElementById("rematch-btn").disabled      = !(isHost && gamePhase === "ended");
+  document.getElementById("submit-action-btn").disabled = !myTurn;
+  document.getElementById("action-input").disabled      = !myTurn;
+};
+
+// ---------------------------------------------------------------------------
+// WebSocket lifecycle.
+// ---------------------------------------------------------------------------
 const connectWs = (code) => {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/room/${code}`);
-  ws.onopen = () => { log("ws open"); document.getElementById("play-fs").disabled = false; };
+  ws.onopen  = () => { log("ws open"); document.getElementById("play-fs").disabled = false; };
+  ws.onclose = (ev) => { log("ws closed", ev.code); };
   ws.onmessage = (ev) => {
     const env = JSON.parse(ev.data);
     log("<-", env);
-    const m = env.msg;
-    if (m.type === "welcome") { mySeat = m.seat; }
-    if (m.type === "lobby_update") { renderSeats(m.seats); }
+    handleMessage(env.msg);
+    render();
   };
-  ws.onclose = (ev) => { log("ws closed", ev.code); };
 };
 
-const renderSeats = (seats) => {
-  const div = document.getElementById("seats");
-  div.innerHTML = "";
-  for (const s of seats) {
-    const span = document.createElement("span");
-    span.className = "seat" + (s.connected ? "" : " disconnected");
-    span.textContent = `[seat ${s.seat}] ${s.nickname}${s.connected ? "" : " (gone)"}`;
-    div.appendChild(span);
+const handleMessage = (m) => {
+  switch (m.type) {
+    case "welcome":
+      mySeat    = m.seat;
+      hostSeat  = m.room.host_seat;
+      gamePhase = m.room.phase;
+      seats     = m.room.seats;
+      break;
+    case "lobby_update":
+      seats = m.seats;
+      break;
+    case "snapshot":
+      gamePhase    = m.snapshot.phase;
+      currentTurn  = m.snapshot.current_turn?.player_id ?? null;
+      myHand       = m.snapshot.own_hand ?? [];
+      break;
+    case "event":
+      handleEvent(m.event);
+      break;
+    case "accepted":
+      // After my own action lands, refresh my hand via a snapshot request.
+      requestSnapshot();
+      break;
+    case "rejected":
+      // Surfaced in the log; no state change.
+      break;
+    case "room_closed":
+      gamePhase = "ended";
+      break;
   }
+};
+
+const handleEvent = (ev) => {
+  if (ev.type === "turn_advanced") {
+    currentTurn = ev.next_player_id;
+  } else if (ev.type === "game_ended") {
+    gamePhase = "ended";
+  }
+  // Other event types (card_drawn, discarded, meld_*, etc.) update the
+  // authoritative state — we'll resync via the snapshot triggered on accepted.
 };
 
 const send = (msg) => {
@@ -85,7 +234,11 @@ const send = (msg) => {
   log("->", env);
   ws.send(JSON.stringify(env));
 };
+const requestSnapshot = () => send({ type: "request_snapshot" });
 
+// ---------------------------------------------------------------------------
+// Form wiring.
+// ---------------------------------------------------------------------------
 document.getElementById("create-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -100,7 +253,7 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
     headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
   log("created", j);
-  connectWs(j.room_code);
+  if (j.room_code) connectWs(j.room_code);
 });
 
 document.getElementById("join-form").addEventListener("submit", async (e) => {
@@ -112,17 +265,26 @@ document.getElementById("join-form").addEventListener("submit", async (e) => {
     body: JSON.stringify({ nickname: fd.get("nickname") }) });
   const j = await r.json();
   log("joined", j);
-  connectWs(code);
+  if (typeof j.seat === "number") connectWs(code);
 });
 
-document.getElementById("start-btn").onclick = () => send({ type: "start_game" });
-document.getElementById("rematch-btn").onclick = () => send({ type: "rematch" });
-document.getElementById("snapshot-btn").onclick = () => send({ type: "request_snapshot" });
+document.getElementById("start-btn").onclick    = () => send({ type: "start_game" });
+document.getElementById("rematch-btn").onclick  = () => send({ type: "rematch" });
+document.getElementById("snapshot-btn").onclick = () => requestSnapshot();
 document.getElementById("submit-action-btn").onclick = () => {
   const raw = document.getElementById("action-input").value;
-  const action = JSON.parse(raw);
+  let action;
+  try {
+    action = JSON.parse(raw);
+  } catch (err) {
+    log("bad JSON:", err.message);
+    return;
+  }
+  if (typeof action.player_id !== "number") action.player_id = mySeat;
   send({ type: "submit_action", action });
 };
+
+render();
 </script>
 </body>
 </html>
