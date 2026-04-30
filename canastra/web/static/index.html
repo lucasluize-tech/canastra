@@ -177,7 +177,7 @@
       placeholder='{"type":"draw","player_id":0}'></textarea>
     <br>
     <button id="submit-action-btn" disabled>Submit raw action</button>
-    <small style="color:#666;">player_id is overwritten server-side; you can leave it 0.</small>
+    <small style="color:#666;">player_id is required; server overwrites it with your seat. Leave it as 0.</small>
   </details>
 
   <!-- JSON cheatsheet -->
@@ -198,7 +198,9 @@
 {"type":"discard", "card": &lt;card&gt;}                       // ends your turn
 {"type":"chin"}                                           // voluntary game end
 
-// player_id is added server-side from your session — you can omit it.</pre>
+// player_id is REQUIRED on every action (pydantic validates it).
+// The server overwrites it with your session's seat as a security check,
+// so the value you send doesn't matter — but the field must be present.</pre>
   </details>
 </fieldset>
 
@@ -661,10 +663,14 @@ document.getElementById("submit-action-btn").onclick = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Phase-aware action builders. Server overwrites player_id from the session,
-// so we omit it here.
+// Phase-aware action builders. Pydantic on the server requires player_id at
+// parse time; the WS handler then overwrites it with your session's seat
+// (security check — clients can't impersonate). Either way, we send mySeat.
 // ---------------------------------------------------------------------------
-const submitAction = (action) => send({ type: "submit_action", action });
+const submitAction = (action) => {
+  if (typeof action.player_id !== "number") action.player_id = mySeat;
+  send({ type: "submit_action", action });
+};
 const selectedCards = () =>
   [...selectedHandIndices].sort((a, b) => a - b).map(i => displayHand[i]);
 
