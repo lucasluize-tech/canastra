@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
@@ -25,6 +25,8 @@ class CreateRoomRequest(BaseModel):
     num_decks: int = Field(ge=1, le=16)
     reserves_per_team: int = Field(ge=1, le=16)
     timer_enabled: bool = False
+    team_mode: Literal["by_join_order", "by_choice"] = "by_join_order"
+    host_team: int | None = Field(default=None, ge=0, le=1)
 
 
 class CreateRoomResponse(BaseModel):
@@ -76,8 +78,17 @@ async def post_rooms(
         raise HTTPException(status_code=422, detail="invalid_config") from exc
 
     try:
-        room, binding = manager.create(host_nickname=body.nickname, config=config)
+        room, binding = manager.create(
+            host_nickname=body.nickname,
+            config=config,
+            team_mode=body.team_mode,
+            host_team=body.host_team,
+        )
     except Unavailable:
+        # Most common case: by_choice mode without host_team — surface as 422 so
+        # the client can re-render the form with a clearer message.
+        if body.team_mode == "by_choice" and body.host_team is None:
+            raise HTTPException(status_code=422, detail="host_team_required") from None
         return _unavailable()  # type: ignore[return-value]
 
     _set_session_cookie(response, binding.session_id, secret)
@@ -86,6 +97,7 @@ async def post_rooms(
 
 class JoinRoomRequest(BaseModel):
     nickname: str = Field(min_length=1, max_length=20)
+    team: int | None = Field(default=None, ge=0, le=1)
 
 
 class JoinRoomResponse(BaseModel):
@@ -100,8 +112,11 @@ async def post_room_join(
     manager: Annotated[RoomManager, Depends(_manager)],
     secret: Annotated[bytes, Depends(_secret)],
 ) -> JoinRoomResponse:
+    room = manager.get(code)
+    if room is not None and room.team_mode == "by_choice" and body.team is None:
+        raise HTTPException(status_code=422, detail="team_required")
     try:
-        _, binding = manager.join(code=code, nickname=body.nickname)
+        _, binding = manager.join(code=code, nickname=body.nickname, team=body.team)
     except Unavailable:
         return _unavailable()  # type: ignore[return-value]
 
@@ -121,11 +136,13 @@ async def get_room_public(
         "code": room.code,
         "host_seat": room.host_seat,
         "phase": room.phase,
+        "team_mode": room.team_mode,
         "seats": [
             {
                 "seat": s,
                 "nickname": b.nickname,
                 "connected": b.ws is not None,
+                "team": s % 2,
             }
             for s, b in sorted(room.seats.items())
         ],
